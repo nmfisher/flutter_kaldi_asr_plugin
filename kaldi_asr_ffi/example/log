@@ -1,0 +1,8 @@
+/data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/log --global-cmvn-stats=/data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/global_cmvn --cmvn-config=/data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/cmvn_opts --feature-type=fbank --fbank-config=/data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/fbank.conf --acoustic-scale=1.0 --do-endpointing=false --frame-subsampling-factor=3 --frames-per-chunk=50 --minimize=false --word-symbol-table=/data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/words.txt /data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/final.mdl /data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/HCLG.fst 
+Initializing
+cleaned up
+created feauter info
+read kaldi object
+creating AM from /data/user/0/com.example.kaldi_asr_ffi_example/app_flutter/model/final.mdl
+binary 0
+input 1
