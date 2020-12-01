@@ -22,6 +22,8 @@ typedef DecodeFunctionDart = void Function(
 
 class FFIKaldiAsrPlatform extends KaldiAsrPlatform {
 
+  bool debug;
+
   InitializeFunctionDart _initFn;
   DecodeFunctionDart _decodeFn;
 
@@ -54,13 +56,18 @@ class FFIKaldiAsrPlatform extends KaldiAsrPlatform {
   ///     - parameters must be separated by a newline,  e.g. --cmvn-config=%MODEL_DIR%/cmvn_opts\n--feature-type=fbank\n 
   /// The above files must be located in the top-level directory of the zip file (i.e no subfolders).
   /// Invoking code must call the initialize() function before using the class to perform any work.
-  FFIKaldiAsrPlatform(this.modelDir, this.tempDir) {
+  FFIKaldiAsrPlatform(this.modelDir, this.tempDir, { this.debug = false}) {
     assert(this.modelDir != null);
     assert(this.tempDir != null);
     _initFn = dl.lookupFunction<InitializeFunction, InitializeFunctionDart>(
           "initializeFFI");
     _decodeFn = dl.lookupFunction<DecodeFunction, DecodeFunctionDart>(
           "decode");
+  }
+
+  void _debug(String message) {
+    if(debug)
+      print(message);
   }
 
 
@@ -74,7 +81,7 @@ class FFIKaldiAsrPlatform extends KaldiAsrPlatform {
     var argArray = allocate<Pointer<Utf8>>(count:args.length+1);
     
     var logfile = join(modelDir, "log");
-    print("Writing to $logfile");
+    _debug("Writing to $logfile");
     argArray.elementAt(0).value = Utf8.toUtf8(logfile); // normally the executable at argv[0], but we're invoking via a library. temporary only -  use this for a log file to redirect stderr
     int numArgs = args.length + 1;
 
@@ -97,7 +104,7 @@ class FFIKaldiAsrPlatform extends KaldiAsrPlatform {
     var arkPath =  join(tempDir, randomAlphaNumeric(10));
     var arkFile = File(arkPath);
     await arkFile.writeAsString("000 $wavPath\n");
-    print("Decoding file at ${await arkFile.readAsString()}");
+    _debug("Decoding file at ${await arkFile.readAsString()}");
     _decodeFn(Utf8.toUtf8("scp:$arkPath"), Utf8.toUtf8(transcriptPath));
     arkFile.delete();
     var transcriptFile = File(transcriptPath);
