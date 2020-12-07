@@ -6,8 +6,7 @@ import 'package:path/path.dart';
 import 'package:random_string/random_string.dart';
 import 'package:ffi/ffi.dart';
 
-DynamicLibrary fst = Platform.isAndroid ? DynamicLibrary.open("libfst.so") : DynamicLibrary.process();
-DynamicLibrary dl = Platform.isAndroid ? DynamicLibrary.open("libasrbridge.so") : DynamicLibrary.process();
+DynamicLibrary dl;
 
 typedef InitializeFunction = Int32 Function(
     Int32, Pointer<Pointer<Utf8>>);
@@ -56,9 +55,10 @@ class FFIKaldiAsrPlatform extends KaldiAsrPlatform {
   ///     - parameters must be separated by a newline,  e.g. --cmvn-config=%MODEL_DIR%/cmvn_opts\n--feature-type=fbank\n 
   /// The above files must be located in the top-level directory of the zip file (i.e no subfolders).
   /// Invoking code must call the initialize() function before using the class to perform any work.
-  FFIKaldiAsrPlatform(this.modelDir, this.tempDir, { this.debug = false}) {
+  FFIKaldiAsrPlatform(this.modelDir, this.tempDir, { this.debug = true}) {
     assert(this.modelDir != null);
     assert(this.tempDir != null);
+    dl = Platform.isAndroid ? DynamicLibrary.open("libasrbridge.so") : DynamicLibrary.process();
     _initFn = dl.lookupFunction<InitializeFunction, InitializeFunctionDart>(
           "initializeFFI");
     _decodeFn = dl.lookupFunction<DecodeFunction, DecodeFunctionDart>(
