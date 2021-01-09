@@ -31,6 +31,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   --minimize=false
   --word-symbol-table=%MODEL_DIR%/words.txt
   --samp-freq=%SAMP_FREQ%
+  --endpoint.silence-phones=1
   %MODEL_DIR%/final.mdl 
   %FST_PATH%''';
   
@@ -40,7 +41,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   double _sampFreq;
 
   Socket _socket;
-
+  int _portNum;
   StreamSubscription _listener;
 
   Stream<String> get decoded => _decodedController.stream;
@@ -92,34 +93,36 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
 
     
     _debug("Invoking initialization function with $numArgs args : [ $argArray ]");
-    var portNumber = _initFn(numArgs, argArray);
-    if(portNumber < 0)
+    _portNum = _initFn(numArgs, argArray);
+    if(_portNum < 0)
         throw Exception("Unknown error initializing Kaldi plugin. Check log for further details");
-    _debug("Decoder successfully configured and listening on port $portNumber");
-    try {
-      _socket = await Socket.connect(InternetAddress.loopbackIPv4, portNumber, timeout: Duration(seconds: 30));
-      _listener = _socket.listen((data) {
-          _decodedController.add(utf8.decode(data));
-      });
-    }  catch(err)  {
-      _debug("Socket error : $err");  
-    }
+    _debug("Decoder successfully configured and listening on port $_portNum");
+    
     _debug("Initialization function complete, set socket to $_socket");
   }
-  
+
+  Future connect() async {
+    _socket = await Socket.connect(InternetAddress.loopbackIPv4, _portNum, timeout: Duration(seconds: 30));
+    _listener = _socket.listen((data) {
+        _decodedController.add(utf8.decode(data));
+    });
+  }
+
+  Future disconnect() async {
+    _listener?.cancel();
+    await _socket.close();
+  }
+
   /// 
   /// Decode the audio at the provided path.
   /// If [wordIds] is false, the word IDs will be returned (if true, the word-strings will be returned)
   /// 
-  void decode(Uint8List data) async {
-    if(_socket != null)
+  Future decode(Uint8List data) async {
+    if(_socket != null) {
       _socket.add(data);
-    else
-      print("Null socket!");
-  }
-
-  void complete() async {
-    _socket.close();
+    } else {
+      _debug("Null socket");
+    }
   }
 
 }
