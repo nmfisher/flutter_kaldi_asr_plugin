@@ -101,6 +101,11 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     _debug("Initialization function complete, set socket to $_socket");
   }
 
+  ///
+  /// Connect to the remote online decoder socket. This does not need to be invoked manually, 
+  /// as [decode] will invoke method to establish a connection before any data is sent.
+  /// However, invoking this method manually might be useful if you want to minimize the overhead in sending data to the decoder.
+  ///
   Future connect() async {
     _socket = await Socket.connect(InternetAddress.loopbackIPv4, _portNum, timeout: Duration(seconds: 30));
     _listener = _socket.listen((data) {
@@ -108,21 +113,25 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     });
   }
 
+  ///
+  /// Disconnect from the remote online decoder socket.
+  ///
   Future disconnect() async {
+    if(_socket != null) {
+      await _socket.close();
+      _socket = null;
+    }
     _listener?.cancel();
-    await _socket.close();
   }
 
   /// 
-  /// Decode the audio at the provided path.
-  /// If [wordIds] is false, the word IDs will be returned (if true, the word-strings will be returned)
+  /// Add the provided audio data to the online encoder,
+  /// connecting to the remote socket first if the connection has not yet been established.
   /// 
   Future decode(Uint8List data) async {
-    if(_socket != null) {
-      _socket.add(data);
-    } else {
-      _debug("Null socket");
-    }
+    if(_socket == null)
+      await connect();
+    _socket.add(data);
   }
 
 }
