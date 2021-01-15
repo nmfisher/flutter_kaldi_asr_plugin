@@ -37,7 +37,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   String _modelDir;
   double _sampFreq;
 
-  Socket _socket;
+  Future<Socket> _socket;
   int _portNum;
   StreamSubscription _listener;
 
@@ -109,26 +109,49 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// However, invoking this method manually might be useful if you want to minimize the overhead in sending data to the decoder.
   ///
   Future connect() async {
-    _listener?.cancel();
-    print("Connecting to socket on port $_portNum");
-    _socket = await Socket.connect(InternetAddress.loopbackIPv4, _portNum,
-        timeout: Duration(seconds: 30));
-    _listener = _socket.listen((data) {
-      _decodedController.add(utf8.decode(data));
-    });
-    print("Connected.");
+    if ((await _socket) != null) return;
+
+    try {
+      _listener?.cancel();
+      print("Connecting to socket on port $_portNum");
+      _socket = Socket.connect(InternetAddress.loopbackIPv4, _portNum,
+          timeout: Duration(seconds: 30));
+      _listener = (await _socket).listen((data) {
+        _decodedController.add(utf8.decode(data));
+      });
+      print("Connected.");
+    } catch (err) {
+      print("Error connecting to socket : $err");
+    } finally {}
   }
+
+  bool disconnecting = false;
 
   ///
   /// Disconnect from the remote online decoder socket.
   ///
   Future disconnect() async {
-    if (_socket != null) {
+    print("Disconnecting socket");
+    if (_socket == null) {
+      print("Null socket, returning");
+      return;
+    }
+    disconnecting = true;
+    try {
+      // (await _socket).add(Uint16List.fromList(List.generate(99999, (i) => 0)));
+      // print("Wrote zeros");
+      await (await _socket).flush();
+      print("Flushed");
+    } catch (err) {
+      print("Error flushing socket : $err");
+    } finally {
       try {
-        await _socket.flush();
-        await _socket.close();
+        await (await _socket).close();
+      } catch (err) {
+        print("Error closing socket : $err");
       } finally {
         _socket = null;
+        disconnecting = false;
       }
     }
     print("Disconnected");
@@ -139,7 +162,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// connecting to the remote socket first if the connection has not yet been established.
   ///
   Future decode(Uint8List data) async {
-    if (_socket == null) await connect();
-    _socket.add(data);
+    if (!disconnecting) (await _socket)?.add(data);
   }
 }
