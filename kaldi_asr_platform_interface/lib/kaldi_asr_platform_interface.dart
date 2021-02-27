@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
+enum ConnectionStatus { Connected, Disconnected }
+
 abstract class KaldiAsrPlatform extends PlatformInterface {
   
   KaldiAsrPlatform() : super(token: _token);
@@ -14,6 +16,8 @@ abstract class KaldiAsrPlatform extends PlatformInterface {
   static KaldiAsrPlatform get instance => _instance;
 
   Stream<String> get decoded;
+
+  Stream<ConnectionStatus> get status;
 
   static set instance(KaldiAsrPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);

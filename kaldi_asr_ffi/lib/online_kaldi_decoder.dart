@@ -13,6 +13,7 @@ DynamicLibrary dl;
 typedef InitializeFunction = Int32 Function(Int32, Pointer<Pointer<Utf8>>);
 typedef InitializeFunctionDart = int Function(int, Pointer<Pointer<Utf8>>);
 
+
 class OnlineKaldiDecoder extends KaldiAsrPlatform {
   bool debug;
 
@@ -44,6 +45,9 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   Stream<String> get decoded => _decodedController.stream;
   StreamController<String> _decodedController =
       StreamController<String>.broadcast();
+
+  Stream<ConnectionStatus> get status => _statusController.stream;
+  StreamController<ConnectionStatus> _statusController = StreamController<ConnectionStatus>();
 
   /// Constructs an uninitialized plugin instance.
   /// Accepts a single (optional) argument representing the path to a zip file (e.g. "assets/cvte.zip") containing:
@@ -116,16 +120,26 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       print("Connecting to socket on port $_portNum");
       _socket = Socket.connect(InternetAddress.loopbackIPv4, _portNum,
           timeout: Duration(seconds: 30));
-      _listener = (await _socket).listen((data) {
-        _decodedController.add(utf8.decode(data));
+      _listener = (await _socket).listen((data) async {
+        var decoded = utf8.decode(data);
+        
+        _decodedController.add(decoded);
+        if(decoded.endsWith('\n')) {
+          print("Final decode result received : [ $decoded ]");
+          _listener?.cancel();
+          await disconnect();
+        }
       });
       print("Connected.");
+      _statusController.add(ConnectionStatus.Connected);
     } catch (err) {
       print("Error connecting to socket : $err");
-    } finally {}
+    } finally {
+
+    }
   }
 
-  bool disconnecting = false;
+    bool disconnecting = false;
 
   ///
   /// Disconnect from the remote online decoder socket.
@@ -138,8 +152,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     }
     disconnecting = true;
     try {
-      // (await _socket).add(Uint16List.fromList(List.generate(99999, (i) => 0)));
-      // print("Wrote zeros");
       await (await _socket).flush();
       print("Flushed");
     } catch (err) {
@@ -164,4 +176,40 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   Future decode(Uint8List data) async {
     if (!disconnecting) (await _socket)?.add(data);
   }
+
+  // ///
+  // /// Disconnect from the remote online decoder socket.
+  // ///
+  // Future disconnect() async {
+  //   print("Disconnecting socket");
+  //   if (_socket == null) {
+  //     print("Null socket, returning");
+  //     _statusController.add(ConnectionStatus.Disconnected);
+  //     return;
+  //   }
+  //   try {
+  //     await (await _socket).close();
+  //   } catch (err) {
+  //     print("Error closing socket : $err");
+  //   } finally {
+  //     _socket = null;
+  //     _statusController.add(ConnectionStatus.Disconnected);
+  //   }
+  //   print("Disconnected");
+  // }
+
+  // ///
+  // /// Add the provided audio data to the online encoder,
+  // /// connecting to the remote socket first if the connection has not yet been established.
+  // ///
+  // Future decode(Uint8List data) async {
+  //   var socket = await _socket;
+  //   if(socket != null) {
+  //     socket.add(data);
+  //     await socket.flush();
+  //     print("Wrote ${data.length} bytes");
+  //   } else {
+  //     print("Dropped ${data.length} bytes");
+  //   }
+  // }
 }
