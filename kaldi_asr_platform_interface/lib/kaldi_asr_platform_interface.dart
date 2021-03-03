@@ -24,7 +24,11 @@ abstract class KaldiAsrPlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  Future initialize(String fstpath) {
+  Future loadFST(String fstpath) {
+    throw new UnimplementedError("loadFST is not implemented");
+  }
+
+  Future initialize() {
     throw new UnimplementedError("initialize is not implemented");
   }
 

@@ -15,16 +15,8 @@ dependencies:
   path: ^1.5.1
 
   kaldi_asr_platform_interface:
-    git:
-      url: git://github.com/nmfisher/flutter_kaldi_asr_plugin.git
-      path: kaldi_asr_platform_interface
-    #path: ../../kaldi_asr_platform_interface
+    path: ../../kaldi_asr_platform_interface
   kaldi_asr_ffi:
-    # When depending on this package from a real application you should use:
-    #   kaldi_asr_ffi: ^x.y.z
-    # See https://dart.dev/tools/pub/dependencies#version-constraints
-    # The example app is bundled with the plugin so we use a path dependency on
-    # the parent directory to use the current plugin's version. 
     path: ../
   archive: ^2.0.13
 
@@ -42,6 +34,10 @@ dev_dependencies:
 # The following section is specific to Flutter.
 flutter:
   uses-material-design: true
+  assets:
+     - assets/final.mdl
+     - assets/words_cvte_real.txt
+     - assets/demo.fst
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

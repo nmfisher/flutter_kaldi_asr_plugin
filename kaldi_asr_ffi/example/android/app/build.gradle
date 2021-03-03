@@ -52,6 +52,9 @@ android {
             signingConfig signingConfigs.debug
         }
     }
+    aaptOptions {
+        noCompress "words_cvte_real.txt","final.mdl","demo.fst"
+    }
 }
 
 flutter {

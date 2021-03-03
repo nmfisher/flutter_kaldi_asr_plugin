@@ -1,41 +1,18 @@
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:kaldi_asr_platform_interface/kaldi_asr_platform_interface.dart';
 import 'package:path/path.dart';
-import 'package:random_string/random_string.dart';
-import 'package:ffi/ffi.dart';
-
-DynamicLibrary dl;
-
-typedef InitializeFunction = Int32 Function(Int32, Pointer<Pointer<Utf8>>);
-typedef InitializeFunctionDart = int Function(int, Pointer<Pointer<Utf8>>);
-
 
 class OnlineKaldiDecoder extends KaldiAsrPlatform {
   bool debug;
 
-  InitializeFunctionDart _initFn;
+  static const MethodChannel _channel =
+      const MethodChannel('com.avinium.kaldi_asr_ffi');
 
-  String _initString = '''--global-cmvn-stats=%MODEL_DIR%/global_cmvn
-  --cmvn-config=%MODEL_DIR%/cmvn_opts 
-  --feature-type=fbank 
-  --fbank-config=%MODEL_DIR%/fbank.conf 
-  --acoustic-scale=1.0 
-  --frame-subsampling-factor=3 
-  --frames-per-chunk=50
-  --minimize=false
-  --word-symbol-table=%MODEL_DIR%/words.txt
-  --samp-freq=%SAMP_FREQ%
-  --endpoint.silence-phones=1
-  %MODEL_DIR%/final.mdl 
-  %FST_PATH%''';
-
-  List<String> _args;
-
-  String _modelDir;
+  String _logDir;
   double _sampFreq;
 
   Future<Socket> _socket;
@@ -47,7 +24,8 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       StreamController<String>.broadcast();
 
   Stream<ConnectionStatus> get status => _statusController.stream;
-  StreamController<ConnectionStatus> _statusController = StreamController<ConnectionStatus>();
+  StreamController<ConnectionStatus> _statusController =
+      StreamController<ConnectionStatus>();
 
   /// Constructs an uninitialized plugin instance.
   /// Accepts a single (optional) argument representing the path to a zip file (e.g. "assets/cvte.zip") containing:
@@ -59,48 +37,31 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   ///     - parameters must be separated by a newline,  e.g. --cmvn-config=%MODEL_DIR%/cmvn_opts\n--feature-type=fbank\n
   /// The above files must be located in the top-level directory of the zip file (i.e no subfolders).
   /// Invoking code must call the initialize() function before using the class to perform any work.
-  OnlineKaldiDecoder(this._modelDir, this._sampFreq, {this.debug = true}) {
-    assert(this._modelDir != null);
-    dl = Platform.isAndroid
-        ? DynamicLibrary.open("libasrbridge.so")
-        : DynamicLibrary.process();
-    _initFn = dl.lookupFunction<InitializeFunction, InitializeFunctionDart>(
-        "initializeFFI");
-  }
+  OnlineKaldiDecoder(this._logDir, this._sampFreq, {this.debug = true});
 
   void _debug(String message) {
     if (debug) print(message);
+  }
+
+  Future loadFST(String fstFilename) async {   
+    _listener?.cancel();
+
+    await _channel.invokeMethod('loadFST', {"fst": fstFilename}); 
   }
 
   ///
   /// Initializes this plugin instance with the provided FST path.
   /// It is safe to call this method multiple times, with different FST paths.
   ///
-  Future initialize(String fstPath) async {
-    _listener?.cancel();
+  Future initialize() async {
 
-    if (!File(fstPath).existsSync())
-      throw Exception("Specified FST path does not exist");
-
-    var args = _initString
-        .replaceAll("%FST_PATH%", fstPath)
-        .replaceAll("%MODEL_DIR%", _modelDir)
-        .replaceAll("%SAMP_FREQ%", _sampFreq.toString())
-        .split("\n");
-    var argArray = allocate<Pointer<Utf8>>(count: args.length + 1);
-
-    var logfile = join(_modelDir, "log");
+    var logfile = join(_logDir, "log");
     _debug("Writing to $logfile");
-    argArray.elementAt(0).value = Utf8.toUtf8(
-        logfile); // normally the executable at argv[0], but we're invoking via a library. temporary only -  use this for a log file to redirect stderr
-    int numArgs = args.length + 1;
 
-    for (int i = 1; i < numArgs; i++)
-      argArray.elementAt(i).value = Utf8.toUtf8(args[i - 1].trim());
+    _debug("Invoking initialization function");
 
-    _debug(
-        "Invoking initialization function with $numArgs args : [ $argArray ]");
-    _portNum = _initFn(numArgs, argArray);
+    _portNum = await _channel.invokeMethod('initialize',
+        { "log": logfile, "sampleFrequency": _sampFreq});
     if (_portNum < 0)
       throw Exception(
           "Unknown error initializing Kaldi plugin. Check log for further details");
@@ -122,9 +83,9 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
           timeout: Duration(seconds: 30));
       _listener = (await _socket).listen((data) async {
         var decoded = utf8.decode(data);
-        
+
         _decodedController.add(decoded);
-        if(decoded.endsWith('\n')) {
+        if (decoded.endsWith('\n')) {
           print("Final decode result received : [ $decoded ]");
           _listener?.cancel();
           await disconnect();
@@ -134,12 +95,10 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       _statusController.add(ConnectionStatus.Connected);
     } catch (err) {
       print("Error connecting to socket : $err");
-    } finally {
-
-    }
+    } finally {}
   }
 
-    bool disconnecting = false;
+  bool disconnecting = false;
 
   ///
   /// Disconnect from the remote online decoder socket.
@@ -162,7 +121,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       } catch (err) {
         print("Error closing socket : $err");
       } finally {
-        _socket = null;
+        _socket = null; 
         disconnecting = false;
       }
     }
