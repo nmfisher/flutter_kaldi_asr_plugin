@@ -1,3 +1,4 @@
+#ifdef __cplusplus
 #include "nnet3/nnet-utils.h"
 
 #include <netinet/in.h>
@@ -40,3 +41,4 @@ namespace kaldi {
 }  
   
 
+#endif

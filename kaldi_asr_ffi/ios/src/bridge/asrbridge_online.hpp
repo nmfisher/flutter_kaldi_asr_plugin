@@ -1,3 +1,5 @@
+#ifdef __cplusplus
+
 #include <iostream>
 #include "mmap/mmap_stream.hpp"
 
@@ -12,3 +14,4 @@ int initialize(
   std::string logfile
 );
 
+#endif

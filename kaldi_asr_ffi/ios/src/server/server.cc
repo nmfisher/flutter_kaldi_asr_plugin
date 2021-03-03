@@ -1,4 +1,5 @@
-#include "server.h"
+#include "nnet3/nnet-utils.h"
+#include "server.hpp"
 #include <stdio.h>
 
 //std::ostream& KALDI_ERR = std::cerr;

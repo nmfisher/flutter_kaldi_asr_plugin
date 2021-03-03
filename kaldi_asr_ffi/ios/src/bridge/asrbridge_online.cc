@@ -6,7 +6,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include "mmap/mmap_stream.hpp"
-#include "server/server.h"
+#include "server/server.hpp"
 #include "feat/wave-reader.h"
 #include "online2/online-nnet3-decoding.h"
 #include "online2/online-nnet2-feature-pipeline.h"
@@ -259,8 +259,8 @@ int initialize(
 
     samp_freq = double(sampleFrequency);
     int fd = fileno(logptr);
-    dup2(fd, 1);
-    dup2(fd, 2);
+    //dup2(fd, 1);
+    //dup2(fd, 2);
 
     try {
       
@@ -299,7 +299,6 @@ int initialize(
 
       am_nnet = new nnet3::AmNnetSimple;
     {
-      bool binary;
       trans_model->Read(*mdl, true);
       am_nnet->Read(*mdl, true);
       SetBatchnormTestMode(true, &(am_nnet->GetNnet()));

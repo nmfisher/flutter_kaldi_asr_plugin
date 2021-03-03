@@ -1,3 +1,5 @@
+#ifdef __cplusplus
+
 #pragma once
 #include <streambuf>
 #include <iostream>
@@ -23,4 +25,5 @@ class mmap_stream : public std::streambuf
         
 };
 
+#endif
 
