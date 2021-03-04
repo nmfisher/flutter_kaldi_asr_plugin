@@ -1,3 +1,4 @@
+#include <libgen.h>
 #include <fcntl.h>
 #include <iostream>
 #include <sstream>
@@ -87,6 +88,7 @@ namespace kaldi {
    nnet3::AmNnetSimple *am_nnet;
    LatticeFasterDecoderConfig *decoder_opts;
    OnlineNnet2FeaturePipelineInfo *feature_info;
+   OnlineNnet2FeaturePipeline *feature_pipeline;
    nnet3::DecodableNnetSimpleLoopedInfo *decodable_info;
    fst::Fst<fst::StdArc> *decode_fst;
    nnet3::NnetSimpleLoopedComputationOptions *decodable_opts;
@@ -117,12 +119,13 @@ static void *thr_func(void *args) {
         bool eos = false;
         if(decode_fst == NULL)
           continue; 
-        OnlineNnet2FeaturePipeline feature_pipeline(*feature_info);
-        feature_pipeline.SetCmvnState(*cmvn_state);
+        
+        // feature_pipeline->SetCmvnState(*cmvn_state);
 
         SingleUtteranceNnet3Decoder decoder(*decoder_opts, *trans_model,
                                              *decodable_info,
-                                             *decode_fst, &feature_pipeline);
+                                             *decode_fst, feature_pipeline);
+                                             
         while (!eos) {
           decoder.InitDecoding(frame_offset);
 
@@ -130,13 +133,16 @@ static void *thr_func(void *args) {
              *trans_model,
              feature_info->silence_weighting_config,
              decodable_opts->frame_subsampling_factor);
-          std::vector<std::pair<int32, BaseFloat>> delta_weights;
+          std::vector<std::pair<int32, BaseFloat>> delta_weights; 
+          
+          
           while (true) {
            eos = !server->ReadChunk(chunk_len);
            if (eos) {
-             feature_pipeline.InputFinished();
+             feature_pipeline->InputFinished();
              decoder.AdvanceDecoding();
              decoder.FinalizeDecoding();
+             
              frame_offset += decoder.NumFramesDecoded();
              if (decoder.NumFramesDecoded() > 0) {
                CompactLattice lat;
@@ -159,16 +165,16 @@ static void *thr_func(void *args) {
            }
   
            Vector<BaseFloat> wave_part = server->GetChunk();
-           feature_pipeline.AcceptWaveform(samp_freq, wave_part);
+           feature_pipeline->AcceptWaveform(samp_freq, wave_part);
            samp_count += chunk_len;
   
            if (silence_weighting.Active() &&
-               feature_pipeline.IvectorFeature() != NULL) {
+               feature_pipeline->IvectorFeature() != NULL) {
              silence_weighting.ComputeCurrentTraceback(decoder.Decoder());
-             silence_weighting.GetDeltaWeights(feature_pipeline.NumFramesReady(),
+             silence_weighting.GetDeltaWeights(feature_pipeline->NumFramesReady(),
                                                frame_offset * decodable_opts->frame_subsampling_factor,
                                                &delta_weights);
-             feature_pipeline.UpdateFrameWeights(delta_weights);
+             feature_pipeline->UpdateFrameWeights(delta_weights);
            }
   
            decoder.AdvanceDecoding();
@@ -198,6 +204,7 @@ static void *thr_func(void *args) {
          }
        } 
    }    
+  return NULL;
 } // initializeFFI
 
 Fst<StdArc> *openFST(istream* is) {
@@ -243,9 +250,13 @@ int initialize(
   int sampleFrequency,
   std::string logfile
 ) {
+  
   if(!logptr) {
     logptr = fopen(logfile.c_str(), "a");
   }
+  int fd = fileno(logptr);
+  dup2(fd, 1);
+  dup2(fd, 2);
   
   if(port_num_actual != 0) {
     fprintf(logptr, "Decoder already initialized, returning");  
@@ -253,15 +264,14 @@ int initialize(
     return 0;
   }
 
-   char _;
-   mdl->read(&_, 2);
-      fprintf(logptr, "Initializing FFI\n");
+  // mdl->seekg(2);
+  char _[2];
+  mdl->read(_, 2);
+  fprintf(logptr, "Initializing FFI\n");
+  fflush(logptr);
 
-    samp_freq = double(sampleFrequency);
-    int fd = fileno(logptr);
-    //dup2(fd, 1);
-    //dup2(fd, 2);
-
+  samp_freq = double(sampleFrequency);
+  
     try {
       
       typedef kaldi::int32 int32;
@@ -276,31 +286,60 @@ int initialize(
       endpoint_opts->silence_phones = "1"; 
 
       g_num_threads = 1;
-      
-      feature_info = new OnlineNnet2FeaturePipelineInfo();
-      feature_info->feature_type = "fbank";
-      feature_info->cmvn_opts = OnlineCmvnOptions();
-      feature_info->cmvn_opts.normalize_mean = true;
-      feature_info->cmvn_opts.normalize_variance = false;
-      feature_info->fbank_opts = FbankOptions();
-      feature_info->fbank_opts.frame_opts  = FrameExtractionOptions ();
-      feature_info->fbank_opts.frame_opts.allow_downsample= true;
-      feature_info->fbank_opts.mel_opts = MelBanksOptions();
-      feature_info->fbank_opts.mel_opts.num_bins =40;
+      char* dir = dirname(logfile.c_str());
 
-      stringstream global_cmvn(" [\
-  2.216189e+10 2.600521e+10 2.916423e+10 3.178614e+10 3.200586e+10 3.195871e+10 3.259387e+10 3.319084e+10 3.290808e+10 3.275058e+10 3.242506e+10 3.245142e+10 3.249573e+10 3.253589e+10 3.268942e+10 3.275069e+10 3.297577e+10 3.325684e+10 3.355946e+10 3.367139e+10 3.371792e+10 3.37716e+10 3.397606e+10 3.431521e+10 3.471255e+10 3.493304e+10 3.50486e+10 3.522139e+10 3.540982e+10 3.557348e+10 3.571568e+10 3.570442e+10 3.557826e+10 3.542649e+10 3.535669e+10 3.527832e+10 3.525018e+10 3.524271e+10 3.49012e+10 3.373126e+10 2.214375e+09 2.469868e+11 3.336857e+11 4.160106e+11 4.922849e+11 4.981688e+11 4.95332e+11 5.158198e+11 5.346668e+11 5.244608e+11 5.174505e+11 5.058809e+11 5.04861e+11 5.044923e+11 5.04394e+11 5.079913e+11 5.08971e+11 5.149713e+11 5.23036e+11 5.319296e+11 5.346789e+11 5.352361e+11 5.361379e+11 5.419342e+11 5.524423e+11 5.651946e+11 5.722539e+11 5.756799e+11 5.810493e+11 5.870023e+11 5.921571e+11 5.965064e+11 5.957083e+11 5.909437e+11 5.853348e+11 5.825735e+11 5.797483e+11 5.788734e+11 5.790902e+11 5.687691e+11 5.33679e+11 0 ]");
+      string cmvn_stats = string(dir) + "/cmvnstats";
+      ofstream out(cmvn_stats);
+      out << " [  2.216189e+10 2.600521e+10 2.916423e+10 3.178614e+10 3.200586e+10 3.195871e+10 3.259387e+10 3.319084e+10 3.290808e+10 3.275058e+10 3.242506e+10 3.245142e+10 3.249573e+10 3.253589e+10 3.268942e+10 3.275069e+10 3.297577e+10 3.325684e+10 3.355946e+10 3.367139e+10 3.371792e+10 3.37716e+10 3.397606e+10 3.431521e+10 3.471255e+10 3.493304e+10 3.50486e+10 3.522139e+10 3.540982e+10 3.557348e+10 3.571568e+10 3.570442e+10 3.557826e+10 3.542649e+10 3.535669e+10 3.527832e+10 3.525018e+10 3.524271e+10 3.49012e+10 3.373126e+10 2.214375e+09\n2.469868e+11 3.336857e+11 4.160106e+11 4.922849e+11 4.981688e+11 4.95332e+11 5.158198e+11 5.346668e+11 5.244608e+11 5.174505e+11 5.058809e+11 5.04861e+11 5.044923e+11 5.04394e+11 5.079913e+11 5.08971e+11 5.149713e+11 5.23036e+11 5.319296e+11 5.346789e+11 5.352361e+11 5.361379e+11 5.419342e+11 5.524423e+11 5.651946e+11 5.722539e+11 5.756799e+11 5.810493e+11 5.870023e+11 5.921571e+11 5.965064e+11 5.957083e+11 5.909437e+11 5.853348e+11 5.825735e+11 5.797483e+11 5.788734e+11 5.790902e+11 5.687691e+11 5.33679e+11 0 ]";
+      out.close();
 
-      Matrix<double> *global_cmvn_stats = new Matrix<double>();
-      global_cmvn_stats->Read(global_cmvn, false);
-      cmvn_state = new OnlineCmvnState(*global_cmvn_stats);
- 
+      string fbank_conf = string(dir) + "/fbank.conf";
+      out = ofstream(fbank_conf);
+      out << "--num-mel-bins=40\n--allow-downsample=true";
+      out.close();
+
+      string cmvn_opts = string(dir) + "/cmvn_opts";
+      out = ofstream(cmvn_opts);
+      out << "--norm-means=true\n--norm-vars=false";
+      out.close();
+
+      // stringstream global_cmvn(cmvn_s);
+
+      // Matrix<double> *global_cmvn_stats = new Matrix<double>();
+      // global_cmvn_stats->Read(global_cmvn, false);
+      OnlineNnet2FeaturePipelineConfig cfg;
+      cfg.feature_type="fbank";
+      cfg.fbank_config = fbank_conf;
+      cfg.cmvn_config = cmvn_opts;
+      cfg.global_cmvn_stats_rxfilename = cmvn_stats;
+      feature_info = new OnlineNnet2FeaturePipelineInfo(cfg);
+      // feature_info->use_ivectors = false;
+      // // feature_info->ivector_extractor_info.global_cmvn_stats = *global_cmvn_stats;
+      // // feature_info->ivector_extractor_info.cmvn_opts.normalize_mean = true;
+      // // feature_info->ivector_extractor_info.cmvn_opts.normalize_variance = false;
+      // feature_info->use_cmvn = true;
+      // feature_info->feature_type = "fbank";
+      // feature_info->cmvn_opts.normalize_mean = true;
+      // feature_info->cmvn_opts.normalize_variance = false;
+      // feature_info->global_cmvn_stats_rxfilename = cmvn_file;
+      // feature_info->fbank_opts.frame_opts.allow_downsample= true;
+      // feature_info->fbank_opts.mel_opts.num_bins = 40;
+
+      // cmvn_state = new OnlineCmvnState(*global_cmvn_stats);
+      // cmvn_state = new OnlineCmvnState();  
+      feature_pipeline = new OnlineNnet2FeaturePipeline(*feature_info);
+
       trans_model = new TransitionModel;
 
       am_nnet = new nnet3::AmNnetSimple;
     {
       trans_model->Read(*mdl, true);
+      fprintf(logptr, "Read transition model\n");
+      fflush(logptr);
+
       am_nnet->Read(*mdl, true);
+      fprintf(logptr, "Read acoustic model\n");
+      fflush(logptr);
       SetBatchnormTestMode(true, &(am_nnet->GetNnet()));
       SetDropoutTestMode(true, &(am_nnet->GetNnet()));
       nnet3::CollapseModel(nnet3::CollapseModelConfig(), &(am_nnet->GetNnet()));
@@ -321,19 +360,19 @@ int initialize(
     pthread_t thr;
 
     int rc;
-    fprintf(stderr, "Creating decoder, sample rate was %f and port %d \n", samp_freq, port_num_actual);
+    
     if ((rc = pthread_create(&thr, NULL, thr_func, nullptr))) {
       std::cerr << "error: pthread_create, rc: %d\n" << rc;
       return -1;
     }
+     fprintf(stderr, "Created decoder, sample rate was %f and port %d \n", samp_freq, port_num_actual);
      return port_num_actual;
     } catch(const KaldiFatalError& e) {
         fprintf(logptr, "%s", e.KaldiMessage());
-        return -1;
     } catch(const std::exception& e) {
         fprintf(logptr, "%s", e.what());
-        return -1;
     }
+    return -1;
 }
 
 int main(int argc, char** argv) {
@@ -357,53 +396,8 @@ int main(int argc, char** argv) {
   fprintf(stdout, "Mmaped size %d ", buf.st_size);
 
   istream* in = new istream(mmap_buf);
-/*  *in >> std::noskipws;
-  mmap_buf->in_avail();
-  in->seekg(65);
-  char foo[3060];
-  in->read(foo, 3060);
-  std::cout << in->tellg() << std::endl;
 
-   std::cout << "after open, good=" << in->good() << ", bad=" << in->bad()
-        << ", fail=" << in->fail() << ", eof=" << in->eof() << std::endl;
-
-  mmap_buf->in_avail();
-  if(!in) {
-    std::cout << " OH NO " << std::endl;
-  }
-  return -1;
-  if((in.rdstate() & std::ifstream::failbit ) != 0) {
-    std::cout << "ERROR" << std::endl;
-  } else if((in.rdstate() & std::ifstream::badbit) != 0) {
-    std::cout << "BAD" << std::endl;
-  }
-  std::cout << "tellg" << in.tellg() << std::endl;
-  istream::sentry sent(in);
-  if(!sent) {
-    std::cout <<"NOG OOD"<<std::endl;
-    }
-   std::cout << "tellg" << in.tellg() << std::endl;
-  std::cout << "after open, good=" << in.good() << ", bad=" << in.bad()
-        << ", fail=" << in.fail() << ", eof=" << in.eof() << std::endl;
-
-//  char * out = new char[1000];
-//  is->read(out, 1000);
-  for(int i = 0; i < 10; i++)
-    std::cout << in.get() << std::endl;
-
-  std::cout << "tellg" << in.tellg() << std::endl;
-//  std::ifstream *mdl = new ifstream("final.mdl");
-   std::cout << "after read, good=" << in.good() << ", bad=" << in.bad()
-        << ", fail=" << in.fail() << ", eof=" << in.eof() << std::endl;
-
-//  std::fstream fst("demo.fst");
-//  words.open("words_cvte_real.txt");
-//  std::string logfile("out.log");
-  //initialize(*mdl, words, fst, 22050, logfile);
-   fst::FstHeader hdr;
-   if (hdr.Read(*is, "User-provided stream", true)) {
-      std::cout << hdr.FstType() << std::endl;;
-   } */
   loadFST(in);
 
 }
+

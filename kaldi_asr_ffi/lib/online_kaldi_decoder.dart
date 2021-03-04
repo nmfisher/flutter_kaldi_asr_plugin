@@ -46,7 +46,8 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   Future loadFST(String fstFilename) async {   
     _listener?.cancel();
 
-    await _channel.invokeMethod('loadFST', {"fst": fstFilename}); 
+    var retCode = await _channel.invokeMethod('loadFST', {"fst": fstFilename}); 
+    print("Got retCode $retCode");
   }
 
   ///
@@ -136,39 +137,5 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     if (!disconnecting) (await _socket)?.add(data);
   }
 
-  // ///
-  // /// Disconnect from the remote online decoder socket.
-  // ///
-  // Future disconnect() async {
-  //   print("Disconnecting socket");
-  //   if (_socket == null) {
-  //     print("Null socket, returning");
-  //     _statusController.add(ConnectionStatus.Disconnected);
-  //     return;
-  //   }
-  //   try {
-  //     await (await _socket).close();
-  //   } catch (err) {
-  //     print("Error closing socket : $err");
-  //   } finally {
-  //     _socket = null;
-  //     _statusController.add(ConnectionStatus.Disconnected);
-  //   }
-  //   print("Disconnected");
-  // }
 
-  // ///
-  // /// Add the provided audio data to the online encoder,
-  // /// connecting to the remote socket first if the connection has not yet been established.
-  // ///
-  // Future decode(Uint8List data) async {
-  //   var socket = await _socket;
-  //   if(socket != null) {
-  //     socket.add(data);
-  //     await socket.flush();
-  //     print("Wrote ${data.length} bytes");
-  //   } else {
-  //     print("Dropped ${data.length} bytes");
-  //   }
-  // }
 }
