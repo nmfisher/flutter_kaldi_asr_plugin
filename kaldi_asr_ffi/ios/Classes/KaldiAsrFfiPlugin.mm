@@ -14,9 +14,11 @@
 #import "bridge/asrbridge_online.hpp"
 using namespace std;
 
-ifstream* mdlStream;
-ifstream* symbolStream;
-ifstream* fstStream;
+static ifstream* mdlStream;
+static ifstream* symbolStream;
+static ifstream* fstStream;
+static const char* mdlStreamPath;
+static const char* symbolStreamPath;
 
 @implementation KaldiAsrFfiPlugin
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -33,12 +35,15 @@ ifstream* fstStream;
       int sampleFrequency = [call.arguments[@"sampleFrequency"] intValue];
       NSString* key = [registrar lookupKeyForAsset:@"assets/final.mdl"];
       NSString* path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
-      
 
-      mdlStream = new ifstream([path UTF8String]);
+      NSLog(@"Loading model from path : %@", path);
+
+      mdlStreamPath = [path UTF8String];
+      mdlStream = new ifstream(mdlStreamPath);
       key = [registrar lookupKeyForAsset:@"assets/words_cvte_real.txt"];
       path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
-      symbolStream = new ifstream([path UTF8String]);
+      symbolStreamPath = [path UTF8String];
+      symbolStream = new ifstream(symbolStreamPath);
       int port_num = initialize(mdlStream, symbolStream, sampleFrequency, logFileStr);
       NSNumber* port_num_ns = [NSNumber numberWithInt:port_num];
       NSLog(@"Initialized decoder with port num : %@", port_num_ns);
@@ -61,6 +66,9 @@ ifstream* fstStream;
             return;
         }
         loadFST(fstStream);
+        NSLog(@"LOADED FST PATH %@", path);
+        result(0);
+
     } else {
       NSLog(@"Invalid method : %@", call.method);
       result(FlutterMethodNotImplemented);

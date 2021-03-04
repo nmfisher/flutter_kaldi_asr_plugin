@@ -31,7 +31,10 @@ using namespace kaldi;
 using namespace fst;
 
 namespace kaldi {
- FILE* logptr; 
+
+FILE* logptr;
+istream* mdl_s;
+istream* symbols_s;
 
  std::string LatticeToString(const Lattice &lat, const fst::SymbolTable &word_syms) {
    LatticeWeight weight;
@@ -87,15 +90,15 @@ namespace kaldi {
    TransitionModel *trans_model;
    nnet3::AmNnetSimple *am_nnet;
    LatticeFasterDecoderConfig *decoder_opts;
+   OnlineNnet2FeaturePipelineConfig *feature_opts;
    OnlineNnet2FeaturePipelineInfo *feature_info;
-   OnlineNnet2FeaturePipeline *feature_pipeline;
    nnet3::DecodableNnetSimpleLoopedInfo *decodable_info;
    fst::Fst<fst::StdArc> *decode_fst;
    nnet3::NnetSimpleLoopedComputationOptions *decodable_opts;
    OnlineEndpointConfig *endpoint_opts;
    TcpServer *server;
    fst::SymbolTable *word_syms;
-   OnlineCmvnState *cmvn_state;
+   
    int port_num_actual;
 
 static void *thr_func(void *args) {
@@ -117,40 +120,38 @@ static void *thr_func(void *args) {
         int32 frame_offset = 0;
     
         bool eos = false;
-        if(decode_fst == NULL)
-          continue; 
-        
-        // feature_pipeline->SetCmvnState(*cmvn_state);
+        if(!decode_fst)
+          continue;
+        OnlineNnet2FeaturePipeline feature_pipeline(*feature_info);
 
-        SingleUtteranceNnet3Decoder decoder(*decoder_opts, *trans_model,
+        SingleUtteranceNnet3Decoder ddecoder(*decoder_opts, *trans_model,
                                              *decodable_info,
-                                             *decode_fst, feature_pipeline);
-                                             
+                                             *decode_fst, &feature_pipeline);
         while (!eos) {
-          decoder.InitDecoding(frame_offset);
+            ddecoder.InitDecoding(frame_offset);
 
-          OnlineSilenceWeighting silence_weighting(
+/*          OnlineSilenceWeighting silence_weighting(
              *trans_model,
              feature_info->silence_weighting_config,
              decodable_opts->frame_subsampling_factor);
-          std::vector<std::pair<int32, BaseFloat>> delta_weights; 
+          std::vector<std::pair<int32, BaseFloat>> delta_weights; */
           
           
           while (true) {
            eos = !server->ReadChunk(chunk_len);
            if (eos) {
-             feature_pipeline->InputFinished();
-             decoder.AdvanceDecoding();
-             decoder.FinalizeDecoding();
+             feature_pipeline.InputFinished();
+               ddecoder.AdvanceDecoding();
+               ddecoder.FinalizeDecoding();
              
-             frame_offset += decoder.NumFramesDecoded();
-             if (decoder.NumFramesDecoded() > 0) {
+             frame_offset += ddecoder.NumFramesDecoded();
+             if (ddecoder.NumFramesDecoded() > 0) {
                CompactLattice lat;
-               decoder.GetLattice(true, &lat);
+                 ddecoder.GetLattice(true, &lat);
                std::string msg = LatticeToString(lat, *word_syms);
                // get time-span from previous endpoint to end of audio,
                if (produce_time) {
-                 int32 t_beg = frame_offset - decoder.NumFramesDecoded();
+                 int32 t_beg = frame_offset - ddecoder.NumFramesDecoded();
                  int32 t_end = frame_offset;
                  msg = GetTimeString(t_beg, t_end, frame_shift * frame_subsampling) + " " + msg;
                }
@@ -165,24 +166,24 @@ static void *thr_func(void *args) {
            }
   
            Vector<BaseFloat> wave_part = server->GetChunk();
-           feature_pipeline->AcceptWaveform(samp_freq, wave_part);
+           feature_pipeline.AcceptWaveform(samp_freq, wave_part);
            samp_count += chunk_len;
   
-           if (silence_weighting.Active() &&
-               feature_pipeline->IvectorFeature() != NULL) {
-             silence_weighting.ComputeCurrentTraceback(decoder.Decoder());
-             silence_weighting.GetDeltaWeights(feature_pipeline->NumFramesReady(),
+           /*if (silence_weighting.Active() &&
+               feature_pipeline.IvectorFeature() != NULL) {
+             silence_weighting.ComputeCurrentTraceback(ddecoder.Decoder());
+             silence_weighting.GetDeltaWeights(feature_pipeline.NumFramesReady(),
                                                frame_offset * decodable_opts->frame_subsampling_factor,
                                                &delta_weights);
-             feature_pipeline->UpdateFrameWeights(delta_weights);
-           }
+             feature_pipeline.UpdateFrameWeights(delta_weights);
+           }*/
   
-           decoder.AdvanceDecoding();
+              ddecoder.AdvanceDecoding();
   
            if (samp_count > check_count) {
-             if (decoder.NumFramesDecoded() > 0) {
+             if (ddecoder.NumFramesDecoded() > 0) {
                Lattice lat;
-               decoder.GetBestPath(false, &lat);
+                 ddecoder.GetBestPath(false, &lat);
                TopSort(&lat); // for LatticeStateTimes(),
                std::string msg = LatticeToString(lat, *word_syms);
                KALDI_VLOG(1) << "Temporary transcript: " << msg;
@@ -191,11 +192,11 @@ static void *thr_func(void *args) {
              check_count += check_period;
            }
   
-           if (decoder.EndpointDetected(*endpoint_opts)) {
-             decoder.FinalizeDecoding();
-             frame_offset += decoder.NumFramesDecoded();
+           if (ddecoder.EndpointDetected(*endpoint_opts)) {
+               ddecoder.FinalizeDecoding();
+             frame_offset += ddecoder.NumFramesDecoded();
              CompactLattice lat;
-             decoder.GetLattice(true, &lat);
+               ddecoder.GetLattice(true, &lat);
              std::string msg = LatticeToString(lat, *word_syms); 
              KALDI_VLOG(1) << "Endpoint, sending message: " << msg;
              server->WriteLn(msg);
@@ -204,7 +205,7 @@ static void *thr_func(void *args) {
          }
        } 
    }    
-  return NULL;
+  return nullptr;
 } // initializeFFI
 
 Fst<StdArc> *openFST(istream* is) {
@@ -213,16 +214,16 @@ Fst<StdArc> *openFST(istream* is) {
    //
    if (!hdr.Read(*is, "User-provided stream")) {
        KALDI_ERR << "Reading FST: error reading FST header";
-       return NULL;
+       return nullptr;
    }  
    // Check the type of Arc
    if (hdr.ArcType() != fst::StdArc::Type()) {
        KALDI_ERR << "FST with arc type " << hdr.ArcType() << " is not supported.";
-       return NULL;
+       return nullptr;
    }
    // Read the FST
    FstReadOptions ropts("<unspecified>", &hdr);
-   Fst<StdArc> *fst = NULL;
+   Fst<StdArc> *fst = nullptr;
    if (hdr.FstType() == "const") {
      fst = ConstFst<StdArc>::Read(*is, ropts);
    } else if (hdr.FstType() == "vector") {
@@ -230,19 +231,19 @@ Fst<StdArc> *openFST(istream* is) {
    }
    if (!fst) {
       KALDI_ERR << "Could not read fst";
-      return NULL;
    }
    return fst;
 }
 
 int fstnum = 0;
 int loadFST(istream* fst) {
-  delete(decode_fst);    
+ // delete(decode_fst);    
   fprintf(logptr, "Opening FST %d\n", fstnum);
   fstnum++;
   decode_fst = openFST(fst);
   return 0;
 }
+
 
 int initialize(
   istream* mdl, 
@@ -255,8 +256,8 @@ int initialize(
     logptr = fopen(logfile.c_str(), "a");
   }
   int fd = fileno(logptr);
-  dup2(fd, 1);
-  dup2(fd, 2);
+  //dup2(fd, 1);
+  //dup2(fd, 2);
   
   if(port_num_actual != 0) {
     fprintf(logptr, "Decoder already initialized, returning");  
@@ -264,11 +265,11 @@ int initialize(
     return 0;
   }
 
-  // mdl->seekg(2);
   char _[2];
   mdl->read(_, 2);
-  fprintf(logptr, "Initializing FFI\n");
-  fflush(logptr);
+
+  mdl_s = mdl;
+  symbols_s = symbols;
 
   samp_freq = double(sampleFrequency);
   
@@ -277,16 +278,26 @@ int initialize(
       typedef kaldi::int32 int32;
       typedef kaldi::int64 int64;
 
+      feature_opts = new OnlineNnet2FeaturePipelineConfig;
       decodable_opts = new nnet3::NnetSimpleLoopedComputationOptions;
-      decodable_opts->acoustic_scale = 1.0;
-      decodable_opts->frame_subsampling_factor = 3.0;
-      decodable_opts->frames_per_chunk = 50;
       decoder_opts = new LatticeFasterDecoderConfig;
       endpoint_opts = new OnlineEndpointConfig;
-      endpoint_opts->silence_phones = "1"; 
+
+      ParseOptions po("usage");
+
+      feature_opts->Register(&po);
+      decodable_opts->Register(&po);
+      decoder_opts->Register(&po);
+      endpoint_opts->Register(&po);
 
       g_num_threads = 1;
-      char* dir = dirname(logfile.c_str());
+      string directory;
+      const size_t last_slash_idx = logfile.rfind('/');
+      if (std::string::npos != last_slash_idx)
+        {
+            directory = logfile.substr(0, last_slash_idx);
+        }
+      const char* dir = directory.c_str();
 
       string cmvn_stats = string(dir) + "/cmvnstats";
       ofstream out(cmvn_stats);
@@ -303,47 +314,29 @@ int initialize(
       out << "--norm-means=true\n--norm-vars=false";
       out.close();
 
-      // stringstream global_cmvn(cmvn_s);
+      string cmvn = "--cmvn-config=" + cmvn_opts;
+      string fbank = "--fbank-config=" + fbank_conf;
+      string stats = "--global-cmvn-stats=" + cmvn_stats;
 
-      // Matrix<double> *global_cmvn_stats = new Matrix<double>();
-      // global_cmvn_stats->Read(global_cmvn, false);
-      OnlineNnet2FeaturePipelineConfig cfg;
-      cfg.feature_type="fbank";
-      cfg.fbank_config = fbank_conf;
-      cfg.cmvn_config = cmvn_opts;
-      cfg.global_cmvn_stats_rxfilename = cmvn_stats;
-      feature_info = new OnlineNnet2FeaturePipelineInfo(cfg);
-      // feature_info->use_ivectors = false;
-      // // feature_info->ivector_extractor_info.global_cmvn_stats = *global_cmvn_stats;
-      // // feature_info->ivector_extractor_info.cmvn_opts.normalize_mean = true;
-      // // feature_info->ivector_extractor_info.cmvn_opts.normalize_variance = false;
-      // feature_info->use_cmvn = true;
-      // feature_info->feature_type = "fbank";
-      // feature_info->cmvn_opts.normalize_mean = true;
-      // feature_info->cmvn_opts.normalize_variance = false;
-      // feature_info->global_cmvn_stats_rxfilename = cmvn_file;
-      // feature_info->fbank_opts.frame_opts.allow_downsample= true;
-      // feature_info->fbank_opts.mel_opts.num_bins = 40;
+      const char* cmvn_c = cmvn.c_str();
+      const char* fbank_c = fbank.c_str();
+      const char* stats_c =stats.c_str();
 
-      // cmvn_state = new OnlineCmvnState(*global_cmvn_stats);
-      // cmvn_state = new OnlineCmvnState();  
-      feature_pipeline = new OnlineNnet2FeaturePipeline(*feature_info);
+      const char* opts[10] = {
+        "", stats_c, cmvn_c,  "--feature-type=fbank", fbank_c, "--acoustic-scale=1.0", "--frame-subsampling-factor=3", "--frames-per-chunk=50", "--minimize=false", "--endpoint.silence-phones=1" };
+
+      po.Read(10, opts);
+
+      feature_info = new OnlineNnet2FeaturePipelineInfo(*feature_opts);
 
       trans_model = new TransitionModel;
 
       am_nnet = new nnet3::AmNnetSimple;
-    {
       trans_model->Read(*mdl, true);
-      fprintf(logptr, "Read transition model\n");
-      fflush(logptr);
-
       am_nnet->Read(*mdl, true);
-      fprintf(logptr, "Read acoustic model\n");
-      fflush(logptr);
       SetBatchnormTestMode(true, &(am_nnet->GetNnet()));
       SetDropoutTestMode(true, &(am_nnet->GetNnet()));
       nnet3::CollapseModel(nnet3::CollapseModelConfig(), &(am_nnet->GetNnet()));
-    }
 
     decodable_info = new nnet3::DecodableNnetSimpleLoopedInfo(*decodable_opts,
                                                       am_nnet);
@@ -401,3 +394,34 @@ int main(int argc, char** argv) {
 
 }
 
+// stringstream global_cmvn(cmvn_s);
+
+// Matrix<double> *global_cmvn_stats = new Matrix<double>();
+// global_cmvn_stats->Read(global_cmvn, false);
+
+/*decodable_opts->acoustic_scale = 1.0;
+decodable_opts->frame_subsampling_factor = 3.0;
+decodable_opts->frames_per_chunk = 50;
+endpoint_opts->silence_phones = "1"; */
+
+/*OnlineNnet2FeaturePipelineConfig cfg;
+cfg.feature_type="fbank";
+cfg.fbank_config = fbank_conf;
+cfg.cmvn_config = cmvn_opts;
+cfg.global_cmvn_stats_rxfilename = cmvn_stats;
+// feature_info->use_ivectors = false;
+// // feature_info->ivector_extractor_info.global_cmvn_stats = *global_cmvn_stats;
+// // feature_info->ivector_extractor_info.cmvn_opts.normalize_mean = true;
+// // feature_info->ivector_extractor_info.cmvn_opts.normalize_variance = false;
+// feature_info->use_cmvn = true;
+// feature_info->feature_type = "fbank";
+// feature_info->cmvn_opts.normalize_mean = true;
+// feature_info->cmvn_opts.normalize_variance = false;
+// feature_info->global_cmvn_stats_rxfilename = cmvn_file;
+// feature_info->fbank_opts.frame_opts.allow_downsample= true;
+// feature_info->fbank_opts.mel_opts.num_bins = 40;
+
+// cmvn_state = new OnlineCmvnState(*global_cmvn_stats);
+// cmvn_state = new OnlineCmvnState();
+feature_pipeline = new OnlineNnet2FeaturePipeline(*feature_info); */
+// feature_pipeline->SetCmvnState(*cmvn_state);
