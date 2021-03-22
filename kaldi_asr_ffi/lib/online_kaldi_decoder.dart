@@ -12,12 +12,12 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   static const MethodChannel _channel =
       const MethodChannel('com.avinium.kaldi_asr_ffi');
 
-  String _logDir;
-  double _sampFreq;
+  late String _logDir;
+  late double _sampFreq;
 
-  Future<Socket> _socket;
-  int _portNum;
-  StreamSubscription _listener;
+  Future<Socket>? _socket;
+  late int _portNum;
+  StreamSubscription? _listener;
 
   Stream<String> get decoded => _decodedController.stream;
   StreamController<String> _decodedController =
@@ -43,10 +43,10 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     if (debug) print(message);
   }
 
-  Future loadFST(String fstFilename) async {   
+  Future loadFST(String fstFilename) async {
     _listener?.cancel();
 
-    var retCode = await _channel.invokeMethod('loadFST', {"fst": fstFilename}); 
+    var retCode = await _channel.invokeMethod('loadFST', {"fst": fstFilename});
     print("Got retCode $retCode");
   }
 
@@ -55,14 +55,13 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// It is safe to call this method multiple times, with different FST paths.
   ///
   Future initialize() async {
-
     var logfile = join(_logDir, "log");
     _debug("Writing to $logfile");
 
     _debug("Invoking initialization function");
 
-    _portNum = await _channel.invokeMethod('initialize',
-        { "log": logfile, "sampleFrequency": _sampFreq});
+    _portNum = await _channel.invokeMethod(
+        'initialize', {"log": logfile, "sampleFrequency": _sampFreq});
     if (_portNum < 0)
       throw Exception(
           "Unknown error initializing Kaldi plugin. Check log for further details");
@@ -82,7 +81,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       print("Connecting to socket on port $_portNum");
       _socket = Socket.connect(InternetAddress.loopbackIPv4, _portNum,
           timeout: Duration(seconds: 30));
-      _listener = (await _socket).listen((data) async {
+      _listener = (await _socket!).listen((data) async {
         var decoded = utf8.decode(data);
 
         _decodedController.add(decoded);
@@ -112,17 +111,17 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     }
     disconnecting = true;
     try {
-      await (await _socket).flush();
+      await (await _socket!).flush();
       print("Flushed");
     } catch (err) {
       print("Error flushing socket : $err");
     } finally {
       try {
-        await (await _socket).close();
+        await (await _socket!).close();
       } catch (err) {
         print("Error closing socket : $err");
       } finally {
-        _socket = null; 
+        _socket = null;
         disconnecting = false;
       }
     }
@@ -136,6 +135,4 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   Future decode(Uint8List data) async {
     if (!disconnecting) (await _socket)?.add(data);
   }
-
-
 }
