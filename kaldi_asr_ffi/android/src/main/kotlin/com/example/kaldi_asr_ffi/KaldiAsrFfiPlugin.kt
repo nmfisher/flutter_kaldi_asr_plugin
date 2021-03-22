@@ -19,7 +19,8 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
 
   private lateinit var channel : MethodChannel
   private lateinit var context: Context
-  
+  private lateinit var am: AssetManager
+
   companion object {
     init {
       System.loadLibrary("asrbridge");
@@ -27,15 +28,13 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
   }
 
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-    println("Attached to engine")
-
     channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.avinium.kaldi_asr_ffi")
     channel.setMethodCallHandler(this)
     context = flutterPluginBinding.applicationContext
   }
-
+  
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
-    var am = context.getAssets()
+    am = context.getAssets()
     if (call.method == "initialize") {
       var portNum = initialize(am, call.argument<String>("log")!!, call.argument<Int>("sampleFrequency")!!)
       result.success(portNum)
