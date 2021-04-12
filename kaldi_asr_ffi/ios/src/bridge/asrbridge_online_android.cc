@@ -1,10 +1,10 @@
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <android/log.h>
-#include <android/log.h>
 #include <jni.h>
 #include <fcntl.h>
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <sys/types.h> 
 #include <sys/stat.h> 
@@ -24,7 +24,26 @@ static int port_num_actual;
 
 extern "C"
 {
-    JNIEXPORT jint JNICALL Java_com_example_kaldi_1asr_1ffi_KaldiAsrFfiPlugin_loadFST(JNIEnv *env, jobject obj, jobject assetManager, jstring jfstName) {
+
+    JNIEXPORT jint JNICALL Java_com_example_kaldi_1asr_1ffi_KaldiAsrFfiPlugin_loadFSTFromFile(JNIEnv *env, jobject obj, jstring jfstFilepath) {
+        const char *fst_filepath_c = env->GetStringUTFChars(jfstFilepath, 0);
+        if(fststream != NULL) { 
+          delete(fststream);
+          fststream = nullptr;
+          __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Unmapped FST file");
+        }
+        __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Loading FST from file %s", fst_filepath_c);
+
+        fststream = new ifstream(fst_filepath_c);
+        loadFST(fststream); 
+        __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "FST loaded!");
+
+        env->ReleaseStringUTFChars(jfstFilepath, fst_filepath_c);
+        return 0;
+    }
+
+
+    JNIEXPORT jint JNICALL Java_com_example_kaldi_1asr_1ffi_KaldiAsrFfiPlugin_loadFSTFromAsset(JNIEnv *env, jobject obj, jobject assetManager, jstring jfstName) {
         const char *fst_assetpath_c = env->GetStringUTFChars(jfstName, 0);
         std::string fst_assetpath(fst_assetpath_c);
         std::string fst_filepath = "flutter_assets/" + fst_assetpath;

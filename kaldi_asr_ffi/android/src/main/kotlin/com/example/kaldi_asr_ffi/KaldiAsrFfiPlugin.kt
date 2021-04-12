@@ -38,9 +38,13 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
     if (call.method == "initialize") {
       var portNum = initialize(am, call.argument<String>("log")!!, call.argument<Int>("sampleFrequency")!!)
       result.success(portNum)
-    } else if(call.method == "loadFST") {
+    } else if(call.method == "loadFSTFromAsset") {
       var fst = call.argument<String>("fst")!!
-      var retCode = loadFST(am, fst)
+      var retCode = loadFSTFromAsset(am, fst)
+      result.success(retCode);
+    } else if(call.method == "loadFSTFromFile") {
+      var fst = call.argument<String>("fst")!!
+      var retCode = loadFSTFromFile(fst)
       result.success(retCode);
     } else {
       result.notImplemented()
@@ -52,5 +56,6 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
   }
 
   external fun initialize(mgr: AssetManager, log: String, sampleFrequency: Int) : Int;
-  external fun loadFST(mgr: AssetManager, fst: String) : Int;
+  external fun loadFSTFromAsset(mgr: AssetManager, fst: String) : Int;
+  external fun loadFSTFromFile(path: String) : Int;
 }

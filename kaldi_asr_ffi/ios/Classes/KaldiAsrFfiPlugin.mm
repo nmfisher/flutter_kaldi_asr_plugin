@@ -36,7 +36,7 @@ static const char* symbolStreamPath;
       NSString* key = [registrar lookupKeyForAsset:@"assets/final.mdl"];
       NSString* path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
 
-      NSLog(@"Loading model from path : %@", path);
+      NSLog(@"Loading model from asset path : %@", path);
 
       mdlStreamPath = [path UTF8String];
       mdlStream = new ifstream(mdlStreamPath);
@@ -48,7 +48,7 @@ static const char* symbolStreamPath;
       NSNumber* port_num_ns = [NSNumber numberWithInt:port_num];
       NSLog(@"Initialized decoder with port num : %@", port_num_ns);
       result(port_num_ns);
-    } else if([@"loadFST" isEqualToString:call.method]) {
+    } else if([@"loadFSTFromAsset" isEqualToString:call.method]) {
         NSString* fstPath = [NSString stringWithFormat: @"assets/%@", call.arguments[@"fst"]];
         NSString* key = [registrar lookupKeyForAsset:fstPath];
         NSString* path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
@@ -68,7 +68,20 @@ static const char* symbolStreamPath;
         loadFST(fstStream);
         NSLog(@"LOADED FST PATH %@", path);
         result(0);
-
+    } else if([@"loadFSTFromFile" isEqualToString:call.method]) {
+        NSString* fstPath = call.arguments[@"fst"];
+        if(fstStream) {
+          delete(fstStream);	
+        }
+        fstStream = new ifstream([path UTF8String]);
+        if(!fstStream) {
+            NSLog(@"Error loading FST stream");
+            result([NSNumber numberWithInt:-1]);
+            return;
+        }
+        loadFST(fstStream);
+        NSLog(@"LOADED FST PATH %@", path);
+        result(0);
     } else {
       NSLog(@"Invalid method : %@", call.method);
       result(FlutterMethodNotImplemented);
