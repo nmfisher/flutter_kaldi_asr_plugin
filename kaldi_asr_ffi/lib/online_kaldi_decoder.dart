@@ -46,13 +46,15 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   Future loadFSTFromAsset(String fstFilename) async {
     _listener?.cancel();
 
-    var retCode = await _channel.invokeMethod('loadFSTFromAsset', {"fst": fstFilename});
+    var retCode =
+        await _channel.invokeMethod('loadFSTFromAsset', {"fst": fstFilename});
     print("FST load result : $retCode");
   }
 
   Future loadFSTFromFile(String fstFilepath) async {
     _listener?.cancel();
-    var retCode = await _channel.invokeMethod('loadFSTFromFile', {"fst": fstFilepath});
+    var retCode =
+        await _channel.invokeMethod('loadFSTFromFile', {"fst": fstFilepath});
     print("FST load result : $retCode");
   }
 
@@ -60,7 +62,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// Initializes this plugin instance with the provided FST path.
   /// It is safe to call this method multiple times, with different FST paths.
   ///
-  Future initialize() async {
+  Future<int> initialize() async {
     var logfile = join(_logDir, "log");
     _debug("Writing to $logfile");
 
@@ -72,6 +74,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       throw Exception(
           "Unknown error initializing Kaldi plugin. Check log for further details");
     _debug("Decoder successfully configured and listening on port $_portNum");
+    return _portNum;
   }
 
   ///
@@ -84,7 +87,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
 
     try {
       _listener?.cancel();
-      // print("Connecting to socket on port $_portNum");
       _socket = Socket.connect(InternetAddress.loopbackIPv4, _portNum,
           timeout: Duration(seconds: 30));
       _listener = (await _socket!).listen((data) async {
@@ -92,12 +94,10 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
 
         _decodedController.add(decoded);
         if (decoded.endsWith('\n')) {
-          // print("Final decode result received : [ $decoded ]");
           _listener?.cancel();
           await disconnect();
         }
       });
-      // print("Connected.");
       _statusController.add(ConnectionStatus.Connected);
     } catch (err) {
       print("Error connecting to socket : $err");
@@ -110,15 +110,12 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// Disconnect from the remote online decoder socket.
   ///
   Future disconnect() async {
-    // print("Disconnecting socket");
     if (_socket == null) {
-      // print("Null socket, returning");
       return;
     }
     disconnecting = true;
     try {
       await (await _socket!).flush();
-      // print("Flushed");
     } catch (err) {
       print("Error flushing socket : $err");
     } finally {
@@ -131,7 +128,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
         disconnecting = false;
       }
     }
-    // print("Disconnected");
   }
 
   ///
@@ -140,5 +136,14 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   ///
   Future decode(Uint8List data) async {
     if (!disconnecting) (await _socket)?.add(data);
+  }
+
+  void dispose() async {
+    try {
+      await disconnect();
+    } catch (err) {} finally {
+      _decodedController.close();
+      _statusController.close();
+    }
   }
 }
