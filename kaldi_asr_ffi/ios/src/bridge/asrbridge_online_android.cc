@@ -20,7 +20,7 @@ static istream *mdlstream;
 static istream *symbolstream;
 static istream *fststream;
 static mmap_stream *fstbuf;
-static int port_num_actual;
+static DecoderConfiguration configuration;
 
 extern "C"
 {
@@ -72,35 +72,40 @@ extern "C"
         return 0;
     }
 
-    JNIEXPORT jint JNICALL Java_com_example_kaldi_1asr_1ffi_KaldiAsrFfiPlugin_initialize(JNIEnv *env, jobject obj, jobject assetManager, jstring jlogFile, jint sampleFrequency) 
+    JNIEXPORT jintArray JNICALL Java_com_example_kaldi_1asr_1ffi_KaldiAsrFfiPlugin_initialize(JNIEnv *env, jobject obj, jobject assetManager, jstring jlogFile, jint sampleFrequency) 
     {
 
-        if(mdlstream) {
+        if(!mdlstream) {
+            
+          AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
+          const char *log_filepath_c = env->GetStringUTFChars(jlogFile, 0);
+          std::string log_filepath(log_filepath_c);
+
+          mmap_stream* mdlbuf = map_file("flutter_assets/assets/final.mdl", mgr);
+          mmap_stream* symbolbuf = map_file("flutter_assets/assets/words_cvte_real.txt", mgr);
+          if(mdlbuf == NULL) {
+              __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Could not map MDL file");
+          } else if(symbolbuf== NULL) {
+            __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Could not map symbol file");
+          } 
+          mdlstream = new istream(mdlbuf);
+          symbolstream = new istream(symbolbuf);
+          
+          configuration = initialize(mdlstream, symbolstream, (int)sampleFrequency, log_filepath);
+
+          env->ReleaseStringUTFChars(jlogFile, log_filepath_c);
+          __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Released logfile string");
+        } else {
           __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Already initialized.");
-          return port_num_actual;
-        } 
-   
-        AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
-        const char *log_filepath_c = env->GetStringUTFChars(jlogFile, 0);
-        std::string log_filepath(log_filepath_c);
-
-        mmap_stream* mdlbuf = map_file("flutter_assets/assets/final.mdl", mgr);
-        mmap_stream* symbolbuf = map_file("flutter_assets/assets/words_cvte_real.txt", mgr);
-        if(mdlbuf == NULL) {
-            __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Could not map MDL file");
-        } else if(symbolbuf== NULL) {
-          __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Could not map symbol file");
-        } 
-        mdlstream = new istream(mdlbuf);
-        symbolstream = new istream(symbolbuf);
-        
-        port_num_actual = initialize(mdlstream, symbolstream, (int)sampleFrequency, log_filepath);
-
-        __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Created decoder on %d", port_num_actual);
-
-        env->ReleaseStringUTFChars(jlogFile, log_filepath_c);
-        __android_log_print(ANDROID_LOG_VERBOSE, "asrbridge", "Released logfile string");
-        return port_num_actual;
+        }
+        jintArray result;
+        result = env->NewIntArray(2);
+        if (result == NULL) {
+           return NULL; /* out of memory error thrown */
+        }
+        jint data[2] = {configuration.input_port, configuration.output_port };
+        env->SetIntArrayRegion(result, 0, 2, data);
+        return result;
     }
 } 
 

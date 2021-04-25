@@ -55,7 +55,7 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
     channel.setMethodCallHandler(null)
   }
 
-  external fun initialize(mgr: AssetManager, log: String, sampleFrequency: Int) : Int;
+  external fun initialize(mgr: AssetManager, log: String, sampleFrequency: Int) : IntArray;
   external fun loadFSTFromAsset(mgr: AssetManager, fst: String) : Int;
   external fun loadFSTFromFile(path: String) : Int;
 }

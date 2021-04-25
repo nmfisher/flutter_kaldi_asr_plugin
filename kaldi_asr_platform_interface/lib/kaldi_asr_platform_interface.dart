@@ -31,7 +31,7 @@ abstract class KaldiAsrPlatform extends PlatformInterface {
     throw new UnimplementedError("loadFSTFromAsset is not implemented");
   }
 
-  Future<int> initialize() {
+  Future<List<int>> initialize() {
     throw new UnimplementedError("initialize is not implemented");
   }
 
