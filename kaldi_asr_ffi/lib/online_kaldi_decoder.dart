@@ -55,8 +55,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// Load a FST from the specified (Flutter asset path.
   ///
   Future loadFSTFromAsset(String fstFilename) async {
-    _listener?.cancel();
-
     var retCode =
         await _channel.invokeMethod('loadFSTFromAsset', {"fst": fstFilename});
     print("FST load result : $retCode");
@@ -66,7 +64,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// Load a FST from the specified filepath.
   ///
   Future loadFSTFromFile(String fstFilepath) async {
-    _listener?.cancel();
     var retCode =
         await _channel.invokeMethod('loadFSTFromFile', {"fst": fstFilepath});
     print("FST load result : $retCode");
@@ -94,9 +91,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   }
 
   ///
-  /// Connect to the remote online decoder socket. This does not need to be invoked manually,
-  /// as [decode] will invoke method to establish a connection before any data is sent.
-  /// However, invoking this method manually might be useful if you want to minimize the overhead in sending data to the decoder.
+  /// Connect to the decoder output socket. 
   ///
   Future connect() async {
     print("Connecting to decoder socket");
@@ -106,7 +101,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       _listener?.cancel();
       _socket = Socket.connect(InternetAddress.loopbackIPv4, _outputPortNum,
           timeout: Duration(seconds: 30));
-      print("Connected on port $_outputPortNum");
+      print("Connected to decoder on port $_outputPortNum");
           
       _listener = (await _socket!).listen((data) async {
         var decoded = utf8.decode(data);
