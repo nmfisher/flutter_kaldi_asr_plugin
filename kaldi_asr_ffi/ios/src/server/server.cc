@@ -69,6 +69,9 @@ namespace kaldi
 
   int32 TcpServer::Accept()
   {
+    if(client_desc_ != -1) {
+      return client_desc_;
+    } 
     KALDI_LOG << "Waiting for client...";
     socklen_t len;
 
