@@ -80,7 +80,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
 
     var portNumbers = await _channel.invokeMethod(
         'initialize', {"log": logfile, "sampleFrequency": _sampFreq}) as List<int>;
-    print(portNumbers);
     if (portNumbers.length != 2 || portNumbers[0] < 0 || portNumbers[1] < 0)
       throw Exception(
           "Unknown error initializing Kaldi plugin. Check log for further details");
@@ -101,7 +100,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       _listener?.cancel();
       _socket = Socket.connect(InternetAddress.loopbackIPv4, _outputPortNum,
           timeout: Duration(seconds: 30));
-      print("Connected to decoder on port $_outputPortNum");
+      print("Connected to output decoder socket on port $_outputPortNum");
           
       _listener = (await _socket!).listen((data) async {
         var decoded = utf8.decode(data);
