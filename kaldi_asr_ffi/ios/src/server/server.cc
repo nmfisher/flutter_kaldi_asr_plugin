@@ -106,7 +106,8 @@ namespace kaldi
 
     ssize_t ret;
     int poll_ret;
-    size_t to_read = len;
+    char *samp_buf_p = reinterpret_cast<char *>(samp_buf_);
+    size_t to_read = len * sizeof(int16);
     has_read_ = 0;
     while (to_read > 0)
     {
@@ -121,28 +122,29 @@ namespace kaldi
         std::cerr << "Socket error! Disconnecting...";
         break;
       }
-      ret = read(client_desc_, static_cast<void *>(samp_buf_ + has_read_), to_read * sizeof(int16));
+      ret = read(client_desc_, static_cast<void *>(samp_buf_p + has_read_), to_read);
       if (ret <= 0)
       {
+        KALDI_LOG << "Failed to read, aborting";
         break;
       }
-
+          
       int tot = 0;
-      for (size_t i = 0; i < (ret / sizeof(int16)); i++)
+      for (size_t i = 0; i < ret; i++)
       {
         tot += samp_buf_[has_read_ + i];
       }
       if (ret > 0 && tot == 0)
       {
-        KALDI_LOG << ret / sizeof(int16) << " zero bytes detected";
+        KALDI_LOG << ret << " zero samples detected";
         return false;
       }
 
-      to_read -= ret / sizeof(int16);
-      has_read_ += ret / sizeof(int16);
+      to_read -= ret;
+      has_read_ += ret;
     }
-    KALDI_LOG << "Total bytes read : " << has_read_;
-
+    has_read_ /= sizeof(int16);
+    KALDI_LOG << "Total samples read : " << has_read_;
     return has_read_ > 0;
   }
 
@@ -151,10 +153,10 @@ namespace kaldi
     Vector<BaseFloat> buf;
 
     buf.Resize(static_cast<MatrixIndexT>(has_read_));
-
-    for (int i = 0; i < has_read_; i++)
-      buf(i) = static_cast<BaseFloat>(samp_buf_[i]);
-
+    
+    for (int i = 0; i < has_read_; i++) {
+      buf(i) = static_cast<BaseFloat>(samp_buf_[i]) / (BaseFloat)32768; 
+    }
     return buf;
   }
 
