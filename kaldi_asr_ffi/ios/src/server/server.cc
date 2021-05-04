@@ -155,7 +155,7 @@ namespace kaldi
     buf.Resize(static_cast<MatrixIndexT>(has_read_));
     
     for (int i = 0; i < has_read_; i++) {
-      buf(i) = static_cast<BaseFloat>(samp_buf_[i]) / (BaseFloat)32768; 
+      buf(i) = static_cast<BaseFloat>(samp_buf_[i]);
     }
     return buf;
   }
