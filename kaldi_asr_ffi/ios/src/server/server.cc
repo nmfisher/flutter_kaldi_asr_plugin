@@ -1,6 +1,7 @@
 #include "nnet3/nnet-utils.h"
 #include "server.hpp"
 #include <stdio.h>
+#include <sys/select.h>
 
 //std::ostream& KALDI_ERR = std::cerr;
 //std::ostream& KALDI_LOG = std::cerr;
@@ -24,15 +25,16 @@ namespace kaldi
 
     server_desc_ = socket(AF_INET, SOCK_STREAM, 0);
 
-    if (server_desc_ == -1)
-    {
-      KALDI_ERR << "Cannot create TCP socket!";
-      return false;
-    }
-
     int32 flag = 1;
     int32 len = sizeof(int32);
-    if (setsockopt(server_desc_, SOL_SOCKET, SO_REUSEADDR, &flag, len) == -1)
+
+   /* struct timeval t;
+    t.tv_sec = 5;
+    t.tv_usec = 0; */
+
+    if (setsockopt(server_desc_, SOL_SOCKET, SO_REUSEADDR, &flag, len) == -1 
+    // || setsockopt(server_desc_, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(timeval)) == -1
+    )
     {
       KALDI_ERR << "Cannot set socket options!";
       return -1;
@@ -56,6 +58,7 @@ namespace kaldi
       KALDI_ERR << "Error starting TcpServer";
       return -1;
     }
+
     return ntohs(sin.sin_port);
   }
 
@@ -69,14 +72,45 @@ namespace kaldi
 
   int32 TcpServer::Accept()
   {
-    if(client_desc_ != -1) {
+    if (client_desc_ != -1)
+    {
       return client_desc_;
-    } 
+    }
     KALDI_LOG << "Waiting for client...";
+  
+
+    fd_set rfds;
+
+    FD_ZERO(&rfds);
+    FD_SET(server_desc_, &rfds);
+    struct timeval t;
+    t.tv_sec = 0;
+    t.tv_usec = 100;
+    int available = select(server_desc_ + 1, &rfds, NULL, NULL, &t);
+
+    if (available == -1)
+    {
+      KALDI_LOG << errno << " " << strerror(errno);
+      return -1;
+    }
+    else if (available == 0)
+    {
+      KALDI_LOG << "Timed out waiting for data.";
+      return -1;
+    }
+
     socklen_t len;
 
     len = sizeof(struct sockaddr);
-    client_desc_ = accept(server_desc_, (struct sockaddr *)&h_addr_, &len);
+    client_desc_ = accept4(server_desc_, (struct sockaddr *)&h_addr_, &len, SOCK_NONBLOCK);
+
+    if (errno > 0)
+    {
+      KALDI_LOG << strerror(errno);
+      return -1;
+    }
+
+    KALDI_LOG << "Got client desc " << client_desc_;
 
     struct sockaddr_storage addr;
     char ipstr[20];
@@ -109,26 +143,71 @@ namespace kaldi
     char *samp_buf_p = reinterpret_cast<char *>(samp_buf_);
     size_t to_read = len * sizeof(int16);
     has_read_ = 0;
+
+    struct timeval t;
+    t.tv_sec = 30;
+    t.tv_usec = 0;
+
+    if (client_desc_ == -1)
+    {
+      return false;
+    }
+
+    fd_set rfds;
+
+    FD_ZERO(&rfds);
+    FD_SET(client_desc_, &rfds);
+
     while (to_read > 0)
     {
+      // KALDI_LOG << "Selecting ";
+      int available = select(client_desc_ + 1, &rfds, NULL, NULL, &t);
+
+      if (available == -1)
+      {
+        KALDI_LOG << errno << " " << strerror(errno);
+        return false;
+      }
+      else if (available == 0)
+      {
+        KALDI_LOG << "Timed out waiting for data.";
+        return false;
+      }
+
+      // KALDI_LOG << "Polling";
+
       poll_ret = poll(client_set_, 1, timeout);
       if (poll_ret == 0)
       {
-        std::cerr << "Socket timeout! Disconnecting...";
+        Disconnect();
+        KALDI_LOG << "Socket timeout! Disconnecting...";
         break;
       }
       if (poll_ret < 0)
       {
-        std::cerr << "Socket error! Disconnecting...";
+        Disconnect();
+        KALDI_LOG << "Socket error! Disconnecting...";
         break;
       }
       ret = read(client_desc_, static_cast<void *>(samp_buf_p + has_read_), to_read);
       if (ret <= 0)
       {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+          Disconnect();
+          KALDI_LOG << "#recv_response. errno = EAGAIN#";
+          return false;
+        }
+        else if (errno == EINTR)
+        {
+          Disconnect();
+          KALDI_LOG << "recv interruputed";
+          return false;
+        }
         KALDI_LOG << "Failed to read, aborting";
         break;
       }
-          
+
       int tot = 0;
       for (size_t i = 0; i < ret; i++)
       {
@@ -153,8 +232,9 @@ namespace kaldi
     Vector<BaseFloat> buf;
 
     buf.Resize(static_cast<MatrixIndexT>(has_read_));
-    
-    for (int i = 0; i < has_read_; i++) {
+
+    for (int i = 0; i < has_read_; i++)
+    {
       buf(i) = static_cast<BaseFloat>(samp_buf_[i]);
     }
     return buf;
@@ -164,8 +244,8 @@ namespace kaldi
   {
     if (client_desc_ == -1)
     {
-        KALDI_LOG << "No active client, ignoring";
-        return false;
+      KALDI_LOG << "No active client, ignoring";
+      return false;
     }
 
     const char *p = msg.c_str();
@@ -174,7 +254,8 @@ namespace kaldi
     while (to_write > 0)
     {
       ssize_t ret = write(client_desc_, static_cast<const void *>(p + wrote), to_write);
-      if (ret <= 0) {
+      if (ret <= 0)
+      {
         return false;
       }
 
@@ -196,8 +277,19 @@ namespace kaldi
   {
     if (client_desc_ != -1)
     {
+      KALDI_LOG << "Closing client connection";
       close(client_desc_);
       client_desc_ = -1;
     }
+    else
+    {
+      KALDI_LOG << "Client connection already closed.";
+    }
+  }
+
+  void TcpServer::Kill() {
+    Disconnect();
+    if (server_desc_ != -1)
+      close(server_desc_);
   }
 } // namespace kaldi

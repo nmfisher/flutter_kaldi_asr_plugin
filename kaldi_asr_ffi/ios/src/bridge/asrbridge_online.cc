@@ -27,6 +27,8 @@
 #include <pthread.h>
 #include <unistd.h>
 #include "asrbridge_online.hpp"
+#include <chrono>
+#include <thread>
 
 using namespace kaldi;
 using namespace fst;
@@ -34,9 +36,9 @@ using namespace fst;
 namespace kaldi
 {
 
-  FILE *logptr;
-  istream *mdl_s;
-  istream *symbols_s;
+  static FILE *logptr;
+  static istream *mdl_s;
+  static istream *symbols_s;
 
   std::string LatticeToString(const Lattice &lat, const fst::SymbolTable &word_syms)
   {
@@ -91,12 +93,13 @@ namespace kaldi
     return LatticeToString(best_path_lat, word_syms);
   }
 }
-BaseFloat chunk_length_secs = 0.18;
-BaseFloat output_period = 1;
+BaseFloat chunk_length_secs = 0.5;
+BaseFloat output_period = 0.5;
 BaseFloat samp_freq = 16000.0;
 bool produce_time = false;
-int timeout = -1;
+int timeout = 5000;
 
+bool terminateDecoder = false;
 TransitionModel *trans_model;
 nnet3::AmNnetSimple *am_nnet;
 LatticeFasterDecoderConfig *decoder_opts;
@@ -112,6 +115,7 @@ fst::SymbolTable *word_syms;
 
 int input_port_num_actual = -1;
 int output_port_num_actual = -1;
+static int iter_count = 0;
 
 static void *thr_func(void *args)
 {
@@ -120,18 +124,33 @@ static void *thr_func(void *args)
   int32 frame_subsampling = decodable_opts->frame_subsampling_factor;
 
   signal(SIGPIPE, SIG_IGN);
-  
-  outputServer->Accept();
 
-  while (true)
+  while (!terminateDecoder)
   {
 
+    // KALDI_LOG << "Accepting outputserver";
+    if(outputServer->Accept() == -1) {
+      // KALDI_LOG << "No output server";
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      continue;
+    };
+    // KALDI_LOG << "Accepting inputserver";
+    if(inputServer->Accept() == -1) {
+      // KALDI_LOG << "No inputserver";
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      continue;
+    }
+    // KALDI_LOG << "Checking decode fst";
     if (!decode_fst)
     {
+      // KALDI_LOG << "No decode_fst";
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
 
-    inputServer->Accept();
+    // std::string fstring("/data/user/0/com.example.incredible_audio_pipeline_example/app_flutter/audio" + to_string(iter_count) + ".dat");
+
+    // FILE *audiofile = fopen(fstring.c_str(), "a");
 
     int32 samp_count = 0; // this is used for output refresh rate
     size_t chunk_len = static_cast<size_t>(chunk_length_secs * samp_freq);
@@ -149,6 +168,8 @@ static void *thr_func(void *args)
                                          *decode_fst, &feature_pipeline);
     while (!eos)
     {
+      KALDI_LOG << "not eos";
+
       ddecoder.InitDecoding(frame_offset);
 
       /*          OnlineSilenceWeighting silence_weighting(
@@ -157,11 +178,19 @@ static void *thr_func(void *args)
              decodable_opts->frame_subsampling_factor);
           std::vector<std::pair<int32, BaseFloat>> delta_weights; */
 
-      while (true)
+      while (!terminateDecoder)
       {
+        // KALDI_LOG << "READING CHUNK";
         eos = !inputServer->ReadChunk(chunk_len);
+        // KALDI_LOG << "READ CHUNK";
+        if (terminateDecoder)
+        {
+          // KALDI_LOG << "Terminating decoder";
+          break;
+        }
         if (eos)
         {
+          // KALDI_LOG << "EOS!";
           feature_pipeline.InputFinished();
           ddecoder.AdvanceDecoding();
           ddecoder.FinalizeDecoding();
@@ -169,6 +198,7 @@ static void *thr_func(void *args)
           frame_offset += ddecoder.NumFramesDecoded();
           if (ddecoder.NumFramesDecoded() > 0)
           {
+            // KALDI_LOG << "num frmaes gt 0!";
             CompactLattice lat;
             ddecoder.GetLattice(true, &lat);
             std::string msg = LatticeToString(lat, *word_syms);
@@ -181,19 +211,26 @@ static void *thr_func(void *args)
             }
 
             KALDI_LOG << "EndOfAudio, sending message: " << msg;
-            inputServer->WriteLn(msg);
+            if (!outputServer->WriteLn(msg))
+            {
+              KALDI_LOG << "Failed to write output";
+            }
           }
           else
           {
             KALDI_LOG << "EOS received with no frames decoded";
-            outputServer->Write("\n");
+            // outputServer->Write("\n");
           }
+          KALDI_LOG << "Finished decoding iteration, disconnecting";
           inputServer->Disconnect();
           break;
         }
 
+        // KALDI_LOG << "Advancing decoding";
 
         Vector<BaseFloat> wave_part = inputServer->GetChunk();
+        // fwrite(wave_part.Data(), sizeof(BaseFloat), wave_part.Dim(), audiofile);
+
         feature_pipeline.AcceptWaveform(samp_freq, wave_part);
 
         samp_count += chunk_len;
@@ -210,6 +247,7 @@ static void *thr_func(void *args)
 
         if (samp_count > check_count)
         {
+
           if (ddecoder.NumFramesDecoded() > 0)
           {
             Lattice lat;
@@ -224,18 +262,30 @@ static void *thr_func(void *args)
 
         if (ddecoder.EndpointDetected(*endpoint_opts))
         {
+          KALDI_LOG << "endpoint detected ";
           ddecoder.FinalizeDecoding();
           frame_offset += ddecoder.NumFramesDecoded();
           CompactLattice lat;
           ddecoder.GetLattice(true, &lat);
           std::string msg = LatticeToString(lat, *word_syms);
-          KALDI_VLOG(1) << "Endpoint, sending message: " << msg;
+          KALDI_LOG << "Endpoint, sending message: " << msg;
           outputServer->WriteLn(msg);
-          break; // while (true)
+          break;
         }
       }
+      if (terminateDecoder)
+      {
+        break;
+      }
     }
+    // fclose(audiofile);
+    // iter_count++;
+    // KALDI_LOG << "Reached end";
+
   }
+  delete(inputServer);
+  inputServer = nullptr;
+  // KALDI_LOG << "Deleted inputserver";
   return nullptr;
 } // initializeFFI
 
@@ -273,9 +323,34 @@ Fst<StdArc> *openFST(istream *is)
   return fst;
 }
 
+int start_decoder_thread()
+{
+  pthread_t thr;
+
+  int rc;
+
+  if ((rc = pthread_create(&thr, NULL, thr_func, nullptr)))
+  {
+    std::cerr << "error: pthread_create, rc: %d\n"
+              << rc;
+    return -1;
+  }
+  return 0;
+}
+
 int fstnum = 0;
 int loadFST(istream *fst)
 {
+  KALDI_LOG << "Loading FST";
+  terminateDecoder = true;
+  inputServer->Kill();
+  while (inputServer)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    KALDI_LOG << "Waiting";
+  }
+  KALDI_LOG << "Decoder thread killed.";
+
   if (decode_fst)
   {
     delete (decode_fst);
@@ -283,7 +358,14 @@ int loadFST(istream *fst)
   KALDI_LOG << "Opening FST " << fstnum;
   fstnum++;
   decode_fst = openFST(fst);
-  return 0;
+
+  inputServer = new TcpServer();
+  inputServer->timeout = timeout;
+
+  input_port_num_actual = inputServer->Listen(input_port_num_actual);
+  terminateDecoder = false;
+
+  return start_decoder_thread();
 }
 
 DecoderConfiguration initialize(
@@ -402,22 +484,14 @@ DecoderConfiguration initialize(
       KALDI_ERR << "Error configuring input port " << input_port_num_actual;
     }
     outputServer = new TcpServer();
-    outputServer->timeout = -1;
+    outputServer->timeout = timeout;
     output_port_num_actual = outputServer->Listen(0);
     if (output_port_num_actual <= 0)
     {
       KALDI_ERR << "Error configuring output port " << output_port_num_actual;
     }
 
-    pthread_t thr;
-
-    int rc;
-
-    if ((rc = pthread_create(&thr, NULL, thr_func, nullptr)))
-    {
-      std::cerr << "error: pthread_create, rc: %d\n"
-                << rc;
-    } else {
+    if(start_decoder_thread() == 0) {
       configuration.input_port = input_port_num_actual;
       configuration.output_port = output_port_num_actual;
       KALDI_LOG << "Created decoder, sample rate was " << samp_freq << ", input port " << input_port_num_actual << ", output port " << output_port_num_actual;
