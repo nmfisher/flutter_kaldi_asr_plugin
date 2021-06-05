@@ -104,12 +104,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
           
       _listener = (await _socket!).listen((data) async {
         var decoded = utf8.decode(data);
-
         _decodedController.add(decoded);
-        // if (decoded.endsWith('\n')) {
-        //   _listener?.cancel();
-        //   // await disconnect();
-        // }
       });
       _statusController.add(ConnectionStatus.Connected);
     } catch (err) {
@@ -123,6 +118,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// Disconnect from the remote online decoder socket.
   ///
   Future disconnect() async {
+    print("Disconnecting");
     if (_socket == null) {
       return;
     }
@@ -141,6 +137,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
         disconnecting = false;
       }
     }
+    print("Disconnected");
   }
 
   ///
