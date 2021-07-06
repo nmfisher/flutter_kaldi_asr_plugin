@@ -19,8 +19,7 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
 
   private lateinit var channel : MethodChannel
   private lateinit var context: Context
-  private lateinit var am: AssetManager
-
+  
   companion object {
     init {
       System.loadLibrary("asrbridge");
@@ -28,23 +27,21 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
   }
 
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+    println("Attached to engine")
+
     channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.avinium.kaldi_asr_ffi")
     channel.setMethodCallHandler(this)
     context = flutterPluginBinding.applicationContext
   }
-  
+
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
-    am = context.getAssets()
+    var am = context.getAssets()
     if (call.method == "initialize") {
       var portNum = initialize(am, call.argument<String>("log")!!, call.argument<Int>("sampleFrequency")!!)
       result.success(portNum)
-    } else if(call.method == "loadFSTFromAsset") {
+    } else if(call.method == "loadFST") {
       var fst = call.argument<String>("fst")!!
-      var retCode = loadFSTFromAsset(am, fst)
-      result.success(retCode);
-    } else if(call.method == "loadFSTFromFile") {
-      var fst = call.argument<String>("fst")!!
-      var retCode = loadFSTFromFile(fst)
+      var retCode = loadFST(am, fst)
       result.success(retCode);
     } else {
       result.notImplemented()
@@ -55,7 +52,6 @@ public class KaldiAsrFfiPlugin: FlutterPlugin, MethodCallHandler {
     channel.setMethodCallHandler(null)
   }
 
-  external fun initialize(mgr: AssetManager, log: String, sampleFrequency: Int) : IntArray;
-  external fun loadFSTFromAsset(mgr: AssetManager, fst: String) : Int;
-  external fun loadFSTFromFile(path: String) : Int;
+  external fun initialize(mgr: AssetManager, log: String, sampleFrequency: Int) : Int;
+  external fun loadFST(mgr: AssetManager, fst: String) : Int;
 }

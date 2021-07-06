@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
@@ -10,7 +11,7 @@ abstract class KaldiAsrPlatform extends PlatformInterface {
 
   static final Object _token = Object();
 
-  static late KaldiAsrPlatform _instance;
+  static KaldiAsrPlatform _instance;
 
   static KaldiAsrPlatform get instance => _instance;
 
@@ -23,24 +24,16 @@ abstract class KaldiAsrPlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  Future loadFSTFromFile(String fstpath) {
-    throw new UnimplementedError("loadFSTFromFile is not implemented");
+  Future loadFST(String fstpath) {
+    throw new UnimplementedError("loadFST is not implemented");
   }
 
-  Future loadFSTFromAsset(String fstpath) {
-    throw new UnimplementedError("loadFSTFromAsset is not implemented");
-  }
-
-  Future<List<int>> initialize() {
+  Future initialize() {
     throw new UnimplementedError("initialize is not implemented");
   }
 
   void decode(Uint8List data) async {
     throw new UnimplementedError("decode is not implemented");
-  }
-
-  void dispose() {
-    throw new UnimplementedError("dispose is not implemented");
   }
 
 

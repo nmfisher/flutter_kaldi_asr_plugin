@@ -44,10 +44,12 @@ static const char* symbolStreamPath;
       path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
       symbolStreamPath = [path UTF8String];
       symbolStream = new ifstream(symbolStreamPath);
-      int port_num = initialize(mdlStream, symbolStream, sampleFrequency, logFileStr);
-      NSNumber* port_num_ns = [NSNumber numberWithInt:port_num];
-      NSLog(@"Initialized decoder with port num : %@", port_num_ns);
-      result(port_num_ns);
+      DecoderConfiguration config = initialize(mdlStream, symbolStream, sampleFrequency, logFileStr);
+      NSNumber* input_port_num_ns = [NSNumber numberWithInt:config.input_port];
+      NSNumber* output_port_num_ns = [NSNumber numberWithInt:config.output_port];
+      NSLog(@"Initialized decoder with input port num : %@ and output port %@", input_port_num_ns, output_port_num_ns);
+        NSArray *port_nums = @[ input_port_num_ns, output_port_num_ns ];
+      result(port_nums);
     } else if([@"loadFSTFromAsset" isEqualToString:call.method]) {
         NSString* fstPath = [NSString stringWithFormat: @"assets/%@", call.arguments[@"fst"]];
         NSString* key = [registrar lookupKeyForAsset:fstPath];
@@ -73,14 +75,14 @@ static const char* symbolStreamPath;
         if(fstStream) {
           delete(fstStream);	
         }
-        fstStream = new ifstream([path UTF8String]);
+        fstStream = new ifstream([fstPath UTF8String]);
         if(!fstStream) {
             NSLog(@"Error loading FST stream");
             result([NSNumber numberWithInt:-1]);
             return;
         }
         loadFST(fstStream);
-        NSLog(@"LOADED FST PATH %@", path);
+        NSLog(@"LOADED FST PATH %@", fstPath);
         result(0);
     } else {
       NSLog(@"Invalid method : %@", call.method);

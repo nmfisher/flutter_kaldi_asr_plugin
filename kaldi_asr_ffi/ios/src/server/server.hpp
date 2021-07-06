@@ -27,7 +27,6 @@ namespace kaldi {
     bool WriteLn(const std::string &msg, const std::string &eol = "\n"); // write line to accepted client
   
     void Disconnect();
-    void Kill();
 
     int timeout; 
 
@@ -37,7 +36,6 @@ namespace kaldi {
     int16 *samp_buf_;
     size_t buf_len_, has_read_;
     pollfd client_set_[1];
-    bool kill = false;
 
   };
 }  
