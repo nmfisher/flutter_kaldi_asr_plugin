@@ -128,13 +128,13 @@ static void *thr_func(void *args)
   while (!terminateDecoder)
   {
 
-    // KALDI_LOG << "Accepting outputserver";
+    KALDI_LOG << "Accepting outputserver";
     if(outputServer->Accept() == -1) {
       // KALDI_LOG << "No output server";
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     };
-    // KALDI_LOG << "Accepting inputserver";
+    KALDI_LOG << "Accepting inputserver";
     if(inputServer->Accept() == -1) {
       // KALDI_LOG << "No inputserver";
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -147,10 +147,6 @@ static void *thr_func(void *args)
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
-
-    // std::string fstring("/data/user/0/com.example.incredible_audio_pipeline_example/app_flutter/audio" + to_string(iter_count) + ".dat");
-
-    // FILE *audiofile = fopen(fstring.c_str(), "a");
 
     int32 samp_count = 0; // this is used for output refresh rate
     size_t chunk_len = static_cast<size_t>(chunk_length_secs * samp_freq);
@@ -166,10 +162,12 @@ static void *thr_func(void *args)
     SingleUtteranceNnet3Decoder ddecoder(*decoder_opts, *trans_model,
                                          *decodable_info,
                                          *decode_fst, &feature_pipeline);
+
+    // std::string fstring("/data/user/0/academy.fluent.android/app_flutter/asbridgeaudio" + std::to_string(iter_count));
+    // FILE *audiofile = fopen(fstring.c_str(), "w");
+
     while (!eos)
     {
-      KALDI_LOG << "not eos";
-
       ddecoder.InitDecoding(frame_offset);
 
       /*          OnlineSilenceWeighting silence_weighting(
@@ -180,17 +178,13 @@ static void *thr_func(void *args)
 
       while (!terminateDecoder)
       {
-        // KALDI_LOG << "READING CHUNK";
         eos = !inputServer->ReadChunk(chunk_len);
-        // KALDI_LOG << "READ CHUNK";
         if (terminateDecoder)
         {
-          // KALDI_LOG << "Terminating decoder";
           break;
         }
         if (eos)
         {
-          // KALDI_LOG << "EOS!";
           feature_pipeline.InputFinished();
           ddecoder.AdvanceDecoding();
           ddecoder.FinalizeDecoding();
@@ -198,7 +192,6 @@ static void *thr_func(void *args)
           frame_offset += ddecoder.NumFramesDecoded();
           if (ddecoder.NumFramesDecoded() > 0)
           {
-            // KALDI_LOG << "num frmaes gt 0!";
             CompactLattice lat;
             ddecoder.GetLattice(true, &lat);
             std::string msg = LatticeToString(lat, *word_syms);
@@ -226,10 +219,13 @@ static void *thr_func(void *args)
           break;
         }
 
-        // KALDI_LOG << "Advancing decoding";
-
         Vector<BaseFloat> wave_part = inputServer->GetChunk();
-        // fwrite(wave_part.Data(), sizeof(BaseFloat), wave_part.Dim(), audiofile);
+        float* data = wave_part.Data();
+        int16 copy[wave_part.Dim()];
+        for(int i =0; i < wave_part.Dim(); i++)
+          copy[i] = static_cast<int16>(data[i]);
+
+        // fwrite(&copy, sizeof(int16), wave_part.Dim(), audiofile);
 
         feature_pipeline.AcceptWaveform(samp_freq, wave_part);
 
@@ -278,10 +274,9 @@ static void *thr_func(void *args)
         break;
       }
     }
+    iter_count++;
     // fclose(audiofile);
-    // iter_count++;
-    // KALDI_LOG << "Reached end";
-
+    KALDI_LOG << "Reached end";
   }
   delete(inputServer);
   inputServer = nullptr;
