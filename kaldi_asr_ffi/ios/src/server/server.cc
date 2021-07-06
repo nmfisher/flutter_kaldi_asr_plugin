@@ -19,6 +19,9 @@ namespace kaldi
   int32 TcpServer::Listen(int32 port)
   {
 
+    KALDI_LOG << "TCP server attempting to listen on port " << port;
+
+
     h_addr_.sin_addr.s_addr = INADDR_ANY;
     h_addr_.sin_port = htons(port);
     h_addr_.sin_family = AF_INET;
@@ -36,21 +39,23 @@ namespace kaldi
     // || setsockopt(server_desc_, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(timeval)) == -1
     )
     {
-      KALDI_ERR << "Cannot set socket options!";
+      KALDI_ERR << "TCP server attempting to listen on port " << port;
       return -1;
     }
 
     if (bind(server_desc_, (struct sockaddr *)&h_addr_, sizeof(h_addr_)) == -1)
     {
-      KALDI_ERR << "Cannot bind to port: " << port << " (is it taken?)";
+      KALDI_ERR << "Cannot bind to port: " << port << " (is it taken?):" << strerror(errno);
       return -1;
     }
 
     if (listen(server_desc_, 1) == -1)
     {
-      KALDI_ERR << "Cannot listen on port!";
+      KALDI_ERR << "Cannot listen on port: " << strerror(errno);
       return -1;
     }
+
+
     struct sockaddr_in sin;
     socklen_t socklen = sizeof(sin);
     if (getsockname(server_desc_, (struct sockaddr *)&sin, &socklen) == -1)
@@ -59,14 +64,14 @@ namespace kaldi
       return -1;
     }
 
+    KALDI_LOG << "Successfully listening with FD " << server_desc_;
+
     return ntohs(sin.sin_port);
   }
 
   TcpServer::~TcpServer()
   {
-    Disconnect();
-    if (server_desc_ != -1)
-      close(server_desc_);
+    Kill();
     delete[] samp_buf_;
   }
 
@@ -77,8 +82,13 @@ namespace kaldi
       return client_desc_;
     }
     KALDI_LOG << "Waiting for client...";
-  
 
+    if(server_desc_ == -1) {
+      KALDI_LOG << "Server not listening, runtime error?";
+      return -1;
+    }
+
+  
     fd_set rfds;
 
     FD_ZERO(&rfds);
@@ -90,7 +100,7 @@ namespace kaldi
 
     if (available == -1)
     {
-      KALDI_LOG << errno << " " << strerror(errno);
+      KALDI_LOG << "Could not select available connections : " << strerror(errno);
       return -1;
     }
     else if (available == 0)
@@ -104,9 +114,9 @@ namespace kaldi
     len = sizeof(struct sockaddr);
     client_desc_ = accept4(server_desc_, (struct sockaddr *)&h_addr_, &len, SOCK_NONBLOCK);
 
-    if (errno > 0)
+    if (client_desc_ == -1)
     {
-      KALDI_LOG << strerror(errno);
+      KALDI_ERR << "Could not accept client connection: " << strerror(errno);
       return -1;
     }
 
@@ -235,8 +245,9 @@ namespace kaldi
 
     for (int i = 0; i < has_read_; i++)
     {
-      buf(i) = static_cast<BaseFloat>(samp_buf_[i]);
+      buf(i) = static_cast<BaseFloat>(samp_buf_[i]); 
     }
+    
     return buf;
   }
 
@@ -288,8 +299,11 @@ namespace kaldi
   }
 
   void TcpServer::Kill() {
+    KALDI_LOG << "Killing TCP server";
     Disconnect();
-    if (server_desc_ != -1)
+    if (server_desc_ != -1) {
       close(server_desc_);
+      server_desc_ = -1;
+    }
   }
 } // namespace kaldi
