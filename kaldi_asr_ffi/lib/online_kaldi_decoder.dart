@@ -7,7 +7,6 @@ import 'package:kaldi_asr_platform_interface/kaldi_asr_platform_interface.dart';
 import 'dart:ffi';
 import 'package:path/path.dart';
 
-
 class DecoderConfiguration extends Struct {
   @Int32()
   external int get inputPort;
@@ -50,7 +49,6 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     if (debug) print(message);
   }
 
-
   ///
   /// Load a FST from the specified (Flutter asset path.
   ///
@@ -59,7 +57,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
         await _channel.invokeMethod('loadFSTFromAsset', {"fst": fstFilename});
     print("FST load result : $retCode");
   }
-  
+
   ///
   /// Load a FST from the specified filepath.
   ///
@@ -70,7 +68,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   }
 
   ///
-  /// Initializes this plugin instance, creating a decoder that listens on two TCP ports - one that accepts audio data for input, and another on which output will be written. 
+  /// Initializes this plugin instance, creating a decoder that listens on two TCP ports - one that accepts audio data for input, and another on which output will be written.
   /// This method must be called prior to [loadFSTFromFile] or [loadFSTFromAsset], and is safe to call a number of times.
   /// Returns a list of two integers, representing the input/output ports.
   ///
@@ -78,19 +76,21 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     var logfile = join(_logDir, "log");
     _debug("Writing to $logfile");
 
-    var portNumbers = await _channel.invokeMethod(
-        'initialize', {"log": logfile, "sampleFrequency": _sampFreq}) as List<int>;
-    if (portNumbers.length != 2 || portNumbers[0] < 0 || portNumbers[1] < 0)
+    var portNumbers = (await _channel.invokeMethod<List<Object?>>(
+            'initialize', {"log": logfile, "sampleFrequency": _sampFreq}))!
+        .cast<int>();
+    if (portNumbers!.length != 2 || portNumbers![0] < 0 || portNumbers![1] < 0)
       throw Exception(
           "Unknown error initializing Kaldi plugin. Check log for further details");
-    _inputPortNum = portNumbers[0];
-    _outputPortNum = portNumbers[1];
-    _debug("Decoder successfully configured, listening on port $_inputPortNum for input, output will be available on port $_outputPortNum");
-    return portNumbers;
+    _inputPortNum = portNumbers![0];
+    _outputPortNum = portNumbers![1];
+    _debug(
+        "Decoder successfully configured, listening on port $_inputPortNum for input, output will be available on port $_outputPortNum");
+    return portNumbers!;
   }
 
   ///
-  /// Connect to the decoder output socket. 
+  /// Connect to the decoder output socket.
   ///
   Future connect() async {
     print("Connecting to decoder socket");
@@ -101,7 +101,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
       _socket = Socket.connect(InternetAddress.loopbackIPv4, _outputPortNum,
           timeout: Duration(seconds: 30));
       print("Connected to output decoder socket on port $_outputPortNum");
-          
+
       _listener = (await _socket!).listen((data) async {
         var decoded = utf8.decode(data);
         _decodedController.add(decoded);
@@ -145,7 +145,8 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// connecting to the remote socket first if the connection has not yet been established.
   ///
   Future decode(Uint8List data) async {
-    throw UnimplementedError("This has been temporarily removed as all communication should occur via AudioPipeline");
+    throw UnimplementedError(
+        "This has been temporarily removed as all communication should occur via AudioPipeline");
   }
 
   void dispose() async {

@@ -12,7 +12,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  OnlineKaldiDecoder _asr;
+  late OnlineKaldiDecoder _asr;
 
   @override
   void initState() {
@@ -32,10 +32,10 @@ class _MyAppState extends State<MyApp> {
           title: const Text('Plugin example app'),
         ),
         body: Center(child: RaisedButton(
-          
           onPressed: () {
-          _asr.loadFST("demo.fst");
-        },)),
+            _asr.loadFSTFromAsset("demo.fst");
+          },
+        )),
       ),
     );
   }

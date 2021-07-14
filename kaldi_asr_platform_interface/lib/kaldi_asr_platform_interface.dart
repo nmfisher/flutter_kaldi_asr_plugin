@@ -1,17 +1,15 @@
 import 'dart:async';
-import 'dart:async';
 import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 enum ConnectionStatus { Connected, Disconnected }
 
 abstract class KaldiAsrPlatform extends PlatformInterface {
-  
   KaldiAsrPlatform() : super(token: _token);
 
   static final Object _token = Object();
 
-  static KaldiAsrPlatform _instance;
+  static late KaldiAsrPlatform _instance;
 
   static KaldiAsrPlatform get instance => _instance;
 
@@ -35,6 +33,4 @@ abstract class KaldiAsrPlatform extends PlatformInterface {
   void decode(Uint8List data) async {
     throw new UnimplementedError("decode is not implemented");
   }
-
-
 }

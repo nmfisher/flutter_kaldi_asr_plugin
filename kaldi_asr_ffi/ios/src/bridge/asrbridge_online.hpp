@@ -7,11 +7,18 @@ using namespace std;
 
 int loadFST(istream* fst);
 
-int initialize(
+struct DecoderConfiguration {
+  int input_port;
+  int output_port;
+};
+
+DecoderConfiguration initialize(
   istream* mdl,
   istream* symbols,
   int samp_freq,
   std::string logfile
 );
+
+
 
 #endif
