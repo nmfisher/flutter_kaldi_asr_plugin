@@ -51,7 +51,7 @@ static const char* symbolStreamPath;
         NSArray *port_nums = @[ input_port_num_ns, output_port_num_ns ];
       result(port_nums);
     } else if([@"loadFSTFromAsset" isEqualToString:call.method]) {
-        NSString* fstPath = [NSString stringWithFormat: @"assets/%@", call.arguments[@"fst"]];
+        NSString* fstPath = [NSString stringWithFormat: @"%@", call.arguments[@"fst"]];
         NSString* key = [registrar lookupKeyForAsset:fstPath];
         NSString* path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
 
