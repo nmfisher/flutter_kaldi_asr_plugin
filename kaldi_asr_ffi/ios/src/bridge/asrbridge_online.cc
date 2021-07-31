@@ -95,7 +95,7 @@ namespace kaldi
 }
 BaseFloat chunk_length_secs = 0.5;
 BaseFloat output_period = 0.5;
-BaseFloat samp_freq = 16000.0;
+BaseFloat samp_freq = -1.0;
 bool produce_time = false;
 int timeout = 5000;
 
@@ -128,22 +128,17 @@ static void *thr_func(void *args)
   while (!terminateDecoder)
   {
 
-    KALDI_LOG << "Accepting outputserver";
     if(outputServer->Accept() == -1) {
-      // KALDI_LOG << "No output server";
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     };
-    KALDI_LOG << "Accepting inputserver";
     if(inputServer->Accept() == -1) {
-      // KALDI_LOG << "No inputserver";
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
-    // KALDI_LOG << "Checking decode fst";
+
     if (!decode_fst)
     {
-      // KALDI_LOG << "No decode_fst";
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
@@ -280,9 +275,8 @@ static void *thr_func(void *args)
   }
   delete(inputServer);
   inputServer = nullptr;
-  // KALDI_LOG << "Deleted inputserver";
   return nullptr;
-} // initializeFFI
+} 
 
 Fst<StdArc> *openFST(istream *is)
 {
@@ -375,8 +369,8 @@ DecoderConfiguration initialize(
     logptr = fopen(logfile.c_str(), "a");
   }
   int fd = fileno(logptr);
-  dup2(fd, 1);
-  dup2(fd, 2);
+//  dup2(fd, 1);
+//  dup2(fd, 2);
 
   struct DecoderConfiguration configuration;
   configuration.input_port = input_port_num_actual;
@@ -388,7 +382,7 @@ DecoderConfiguration initialize(
     return configuration;
   }
 
-  KALDI_LOG << "Creating decoder with sample rate " << samp_freq;
+  KALDI_LOG << "Creating decoder";
 
   char _[2];
   mdl->read(_, 2);
