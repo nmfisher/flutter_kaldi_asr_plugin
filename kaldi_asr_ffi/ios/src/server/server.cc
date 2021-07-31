@@ -146,6 +146,7 @@ namespace kaldi
 
   bool TcpServer::ReadChunk(size_t len)
   {
+//    KALDI_LOG << "Reading chunk of " << len << "samples";
     if (buf_len_ != len)
     {
       buf_len_ = len;
@@ -189,8 +190,6 @@ namespace kaldi
         return false;
       }
 
-      // KALDI_LOG << "Polling";
-
       poll_ret = poll(client_set_, 1, timeout);
       if (poll_ret == 0)
       {
@@ -223,32 +222,35 @@ namespace kaldi
         break;
       }
 
+//      KALDI_LOG << "Read " << ret << " bytes, has_read_ was " << has_read_;
+
       int tot = 0;
-      for (size_t i = 0; i < ret; i++)
+      for (size_t i = 0; i < (ret / sizeof(int16)); i++)
       {
-        tot += samp_buf_[has_read_ + i];
+        // samp_buf is int16 so refers to number of samples, not number of bytes
+        // but has_read_ and ret refer to number of bytes
+        tot += samp_buf_[(has_read_ / sizeof(int16)) + i]; 
       }
       if (ret > 0 && tot == 0)
       {
-        KALDI_LOG << ret << " zero samples detected";
+        KALDI_LOG << ret << " zero bytes detected";
         return false;
       }
 
       to_read -= ret;
       has_read_ += ret;
     }
-    has_read_ /= sizeof(int16);
-    KALDI_LOG << "Total samples read : " << has_read_;
+    //KALDI_LOG << "Total samples read : " << (has_read_ / sizeof(int16));
     return has_read_ > 0;
   }
 
   Vector<BaseFloat> TcpServer::GetChunk()
   {
     Vector<BaseFloat> buf;
+    size_t available = has_read_ / sizeof(int16);
+    buf.Resize(static_cast<MatrixIndexT>(available));
 
-    buf.Resize(static_cast<MatrixIndexT>(has_read_));
-
-    for (int i = 0; i < has_read_; i++)
+    for (int i = 0; i < available; i++)
     {
       buf(i) = static_cast<BaseFloat>(samp_buf_[i]); 
     }
