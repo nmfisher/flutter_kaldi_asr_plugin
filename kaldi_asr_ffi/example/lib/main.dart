@@ -31,7 +31,9 @@ class _MyAppState extends State<MyApp> {
         appBar: AppBar(
           title: const Text('Plugin example app'),
         ),
-        body: Center(child: RaisedButton(
+        body: Center(
+            child: ElevatedButton(
+          child: Text("Load demo.fst"),
           onPressed: () {
             _asr.loadFSTFromAsset("demo.fst");
           },
