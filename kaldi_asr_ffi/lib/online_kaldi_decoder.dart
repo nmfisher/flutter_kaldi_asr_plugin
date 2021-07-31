@@ -53,6 +53,7 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   /// Load a FST from the specified (Flutter asset path.
   ///
   Future loadFSTFromAsset(String fstFilename) async {
+    print("Loading FST with filename $fstFilename");
     var retCode =
         await _channel.invokeMethod('loadFSTFromAsset', {"fst": fstFilename});
     print("FST load result : $retCode");
@@ -79,14 +80,14 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
     var portNumbers = (await _channel.invokeMethod<List<Object?>>(
             'initialize', {"log": logfile, "sampleFrequency": _sampFreq}))!
         .cast<int>();
-    if (portNumbers!.length != 2 || portNumbers![0] < 0 || portNumbers![1] < 0)
+    if (portNumbers.length != 2 || portNumbers[0] < 0 || portNumbers[1] < 0)
       throw Exception(
           "Unknown error initializing Kaldi plugin. Check log for further details");
-    _inputPortNum = portNumbers![0];
-    _outputPortNum = portNumbers![1];
+    _inputPortNum = portNumbers[0];
+    _outputPortNum = portNumbers[1];
     _debug(
         "Decoder successfully configured, listening on port $_inputPortNum for input, output will be available on port $_outputPortNum");
-    return portNumbers!;
+    return portNumbers;
   }
 
   ///
@@ -152,7 +153,8 @@ class OnlineKaldiDecoder extends KaldiAsrPlatform {
   void dispose() async {
     try {
       await disconnect();
-    } catch (err) {} finally {
+    } catch (err) {
+    } finally {
       _decodedController.close();
       _statusController.close();
     }
